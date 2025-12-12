@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
     // Connect to database
     const db = await getDb()
     const usersCollection = db.collection("users")
+    const otpsCollection = db.collection("otps")
 
     // Format phone number
     let formattedPhone = phone.trim()
@@ -55,11 +56,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate and send OTP to user's phone via SMS
-    const otpCode = generateOTP()
+    // Check if there's an existing valid OTP for this phone
     
-    // Normalize phone number format for OTP storage (ensure consistent format)
-    // Store OTP with normalized phone number to match verification
+    // Normalize phone number format for OTP check
     let phoneForOTP = user.phone
     if (!phoneForOTP.startsWith("+254")) {
       if (phoneForOTP.startsWith("254")) {
@@ -70,6 +69,31 @@ export async function POST(request: NextRequest) {
         phoneForOTP = "+254" + phoneForOTP
       }
     }
+    
+    // Check for existing valid OTP
+    const existingOTP = await otpsCollection.findOne({
+      $or: [
+        { phone: phoneForOTP },
+        { phone: phoneForOTP.replace(/^\+/, "") },
+      ],
+      expiresAt: { $gt: new Date() },
+    })
+    
+    if (existingOTP) {
+      const expiresIn = Math.floor((existingOTP.expiresAt.getTime() - Date.now()) / 1000)
+      const minutes = Math.floor(expiresIn / 60)
+      const seconds = expiresIn % 60
+      return NextResponse.json(
+        { 
+          error: `Please wait. You can request a new OTP in ${minutes}:${seconds.toString().padStart(2, "0")}`,
+          expiresIn: expiresIn,
+        },
+        { status: 429 }
+      )
+    }
+    
+    // Generate and send OTP to user's phone via SMS
+    const otpCode = generateOTP()
     
     console.log("=".repeat(80))
     console.log("📱 OTP STORAGE DEBUG")

@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -23,6 +23,8 @@ export default function LoginPage() {
   const [showPin, setShowPin] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const [otpExpiresAt, setOtpExpiresAt] = useState<number | null>(null) // When OTP expires
+  const [timeRemaining, setTimeRemaining] = useState<number>(0) // Time remaining in seconds
 
   const handleInputChange = (field: string, value: string | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
@@ -66,6 +68,11 @@ export default function LoginPage() {
       if (result.success) {
         // Store phone for OTP verification
         setUserEmail(result.phone || formData.phone)
+        
+        // Set OTP expiration time (5 minutes from now)
+        const expiresAt = Date.now() + 5 * 60 * 1000
+        setOtpExpiresAt(expiresAt)
+        setTimeRemaining(5 * 60) // 5 minutes in seconds
         
         // OTP should be sent via SMS - no need to show alert
         setStep(2) // Move to OTP verification
@@ -124,6 +131,22 @@ export default function LoginPage() {
     }
   }
 
+  // Countdown timer effect
+  useEffect(() => {
+    if (step === 2 && otpExpiresAt) {
+      const interval = setInterval(() => {
+        const remaining = Math.max(0, Math.floor((otpExpiresAt - Date.now()) / 1000))
+        setTimeRemaining(remaining)
+        
+        if (remaining === 0) {
+          clearInterval(interval)
+        }
+      }, 1000)
+      
+      return () => clearInterval(interval)
+    }
+  }, [step, otpExpiresAt])
+
   // OTP Verification Step
   if (step === 2) {
     return (
@@ -155,6 +178,16 @@ export default function LoginPage() {
             <p className="text-xs text-muted-foreground">
               Enter the 6-digit code sent to your phone
             </p>
+            {otpExpiresAt && timeRemaining > 0 && (
+              <p className="text-xs text-muted-foreground font-medium">
+                Code expires in: {Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, "0")}
+              </p>
+            )}
+            {otpExpiresAt && timeRemaining === 0 && (
+              <p className="text-xs text-orange-600 font-medium">
+                Code has expired. Please request a new one.
+              </p>
+            )}
           </div>
 
           <Button type="submit" className="w-full" disabled={isLoading}>
@@ -207,6 +240,11 @@ export default function LoginPage() {
                   throw new Error(result.error || "Failed to resend OTP")
                 }
 
+                // Reset expiration timer
+                const expiresAt = Date.now() + 5 * 60 * 1000
+                setOtpExpiresAt(expiresAt)
+                setTimeRemaining(5 * 60)
+                
                 alert("OTP resent successfully! Please check your SMS.")
               } catch (err) {
                 setError(err instanceof Error ? err.message : "Failed to resend OTP")
@@ -215,10 +253,12 @@ export default function LoginPage() {
               }
             }}
             className="w-full"
-            disabled={isLoading}
+            disabled={isLoading || (timeRemaining > 0)}
           >
             {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Resend OTP Code
+            {timeRemaining > 0 
+              ? `Resend OTP (${Math.floor(timeRemaining / 60)}:${(timeRemaining % 60).toString().padStart(2, "0")})`
+              : "Resend OTP Code"}
           </Button>
 
           <Button variant="ghost" onClick={() => setStep(1)} className="w-full">

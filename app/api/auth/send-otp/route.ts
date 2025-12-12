@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { generateOTP, storeOTP, sendOTPSMS } from "@/lib/sms"
+import { getDb } from "@/lib/mongodb"
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,6 +22,31 @@ export async function POST(request: NextRequest) {
       formattedPhone = "+" + formattedPhone
     } else if (!formattedPhone.startsWith("+254")) {
       formattedPhone = "+254" + formattedPhone
+    }
+
+    // Check if there's an existing valid OTP for this phone
+    const db = await getDb()
+    const otpsCollection = db.collection("otps")
+    
+    const existingOTP = await otpsCollection.findOne({
+      $or: [
+        { phone: formattedPhone },
+        { phone: formattedPhone.replace(/^\+/, "") },
+      ],
+      expiresAt: { $gt: new Date() },
+    })
+    
+    if (existingOTP) {
+      const expiresIn = Math.floor((existingOTP.expiresAt.getTime() - Date.now()) / 1000)
+      const minutes = Math.floor(expiresIn / 60)
+      const seconds = expiresIn % 60
+      return NextResponse.json(
+        { 
+          error: `Please wait. You can request a new OTP in ${minutes}:${seconds.toString().padStart(2, "0")}`,
+          expiresIn: expiresIn,
+        },
+        { status: 429 }
+      )
     }
 
     // Generate OTP

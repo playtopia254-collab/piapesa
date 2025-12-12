@@ -270,6 +270,16 @@ export default function SignupPage() {
               setResendingOTP(true)
               setError("")
               try {
+                // Format phone number
+                let phone = formData.phone.trim()
+                if (phone.startsWith("0")) {
+                  phone = "+254" + phone.slice(1)
+                } else if (phone.startsWith("254")) {
+                  phone = "+" + phone
+                } else if (!phone.startsWith("+254")) {
+                  phone = "+254" + phone
+                }
+                
                 const response = await fetch("/api/auth/send-otp", {
                   method: "POST",
                   headers: {

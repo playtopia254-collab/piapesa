@@ -1,0 +1,147 @@
+{
+  "users": [
+    {
+      "id": "user_001",
+      "phone": "+254712345678",
+      "name": "John Kamau",
+      "email": "john.kamau@example.com",
+      "balance": 15750.5,
+      "isAgent": false,
+      "pin": "1234",
+      "createdAt": "2024-01-15T10:30:00Z"
+    },
+    {
+      "id": "user_002",
+      "phone": "+254723456789",
+      "name": "Mary Wanjiku",
+      "email": "mary.wanjiku@example.com",
+      "balance": 8920.0,
+      "isAgent": true,
+      "pin": "5678",
+      "location": "Nairobi CBD",
+      "rating": 4.8,
+      "createdAt": "2024-01-10T14:20:00Z"
+    },
+    {
+      "id": "user_003",
+      "phone": "+254734567890",
+      "name": "Peter Mwangi",
+      "email": "peter.mwangi@example.com",
+      "balance": 25300.75,
+      "isAgent": true,
+      "pin": "9012",
+      "location": "Westlands",
+      "rating": 4.9,
+      "createdAt": "2024-01-08T09:15:00Z"
+    }
+  ],
+  "agents": [
+    {
+      "id": "agent_001",
+      "userId": "user_002",
+      "name": "Mary Wanjiku",
+      "phone": "+254723456789",
+      "location": "Nairobi CBD",
+      "coordinates": [-1.2921, 36.8219],
+      "rating": 4.8,
+      "totalTransactions": 156,
+      "availableNetworks": ["M-Pesa", "Airtel Money", "Bank"],
+      "maxAmount": 50000,
+      "isActive": true
+    },
+    {
+      "id": "agent_002",
+      "userId": "user_003",
+      "name": "Peter Mwangi",
+      "phone": "+254734567890",
+      "location": "Westlands",
+      "coordinates": [-1.2676, 36.8108],
+      "rating": 4.9,
+      "totalTransactions": 203,
+      "availableNetworks": ["M-Pesa", "Bank"],
+      "maxAmount": 75000,
+      "isActive": true
+    },
+    {
+      "id": "agent_003",
+      "userId": "user_004",
+      "name": "Grace Nyong'o",
+      "phone": "+254745678901",
+      "location": "Kisumu",
+      "coordinates": [-0.0917, 34.768],
+      "rating": 4.7,
+      "totalTransactions": 89,
+      "availableNetworks": ["M-Pesa", "Airtel Money"],
+      "maxAmount": 30000,
+      "isActive": true
+    }
+  ],
+  "transactions": [
+    {
+      "id": "txn_001",
+      "fromUserId": "user_001",
+      "toPhone": "+254723456789",
+      "amount": 2500.0,
+      "network": "M-Pesa",
+      "purpose": "School fees",
+      "status": "completed",
+      "type": "send",
+      "createdAt": "2024-01-20T14:30:00Z",
+      "completedAt": "2024-01-20T14:31:15Z"
+    },
+    {
+      "id": "txn_002",
+      "fromUserId": "user_001",
+      "agentId": "agent_001",
+      "amount": 5000.0,
+      "network": "M-Pesa",
+      "status": "completed",
+      "type": "withdrawal",
+      "createdAt": "2024-01-19T11:15:00Z",
+      "completedAt": "2024-01-19T11:45:00Z"
+    },
+    {
+      "id": "txn_003",
+      "fromPhone": "+254734567890",
+      "toUserId": "user_001",
+      "amount": 1200.0,
+      "network": "Airtel Money",
+      "purpose": "Lunch money",
+      "status": "completed",
+      "type": "receive",
+      "createdAt": "2024-01-18T13:20:00Z",
+      "completedAt": "2024-01-18T13:21:30Z"
+    }
+  ],
+  "withdrawalRequests": [
+    {
+      "id": "req_001",
+      "userId": "user_001",
+      "amount": 3000.0,
+      "method": "Via Agent",
+      "status": "pending",
+      "createdAt": "2024-01-21T10:00:00Z",
+      "matchedAgentId": null
+    }
+  ],
+  "networks": [
+    {
+      "id": "mpesa",
+      "name": "M-Pesa",
+      "color": "#00A651",
+      "icon": "📱"
+    },
+    {
+      "id": "airtel",
+      "name": "Airtel Money",
+      "color": "#E31E24",
+      "icon": "📲"
+    },
+    {
+      "id": "bank",
+      "name": "Bank Transfer",
+      "color": "#1E40AF",
+      "icon": "🏦"
+    }
+  ]
+}

@@ -1,73 +1,106 @@
 import axios from "axios"
+import { getDb } from "./mongodb"
 
 // Generate a random 6-digit OTP
 export function generateOTP(): string {
   return Math.floor(100000 + Math.random() * 900000).toString()
 }
 
-// Store OTPs temporarily (in production, use Redis or database)
-// Use global variable to persist across module reloads in Next.js
-declare global {
-  // eslint-disable-next-line no-var
-  var otpStore: Map<string, { code: string; expiresAt: number }> | undefined
+// Store OTP with expiration (5 minutes) in MongoDB
+export async function storeOTP(phone: string, code: string): Promise<void> {
+  try {
+    const db = await getDb()
+    const otpsCollection = db.collection("otps")
+    
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000) // 5 minutes from now
+    
+    // Store OTP in database (upsert to replace any existing OTP for this phone)
+    await otpsCollection.updateOne(
+      { phone: phone },
+      {
+        $set: {
+          code: code,
+          expiresAt: expiresAt,
+          createdAt: new Date(),
+        },
+      },
+      { upsert: true }
+    )
+    
+    console.log(`💾 OTP stored in DB for ${phone}: ${code} (expires at ${expiresAt.toISOString()})`)
+    
+    // Clean up expired OTPs in background (don't wait for it)
+    otpsCollection.deleteMany({ expiresAt: { $lt: new Date() } }).catch(console.error)
+  } catch (error) {
+    console.error("Error storing OTP:", error)
+    throw error
+  }
 }
 
-// Initialize OTP store - use global in development to persist across hot reloads
-const otpStore = (global.otpStore ??= new Map<string, { code: string; expiresAt: number }>())
-
-// Store OTP with expiration (5 minutes)
-export function storeOTP(phone: string, code: string): void {
-  const expiresAt = Date.now() + 5 * 60 * 1000 // 5 minutes
-  otpStore.set(phone, { code, expiresAt })
-  
-  console.log(`💾 OTP stored for ${phone}: ${code} (expires at ${new Date(expiresAt).toISOString()})`)
-  console.log(`📦 Current OTP store size: ${otpStore.size}, Keys: ${Array.from(otpStore.keys()).join(", ")}`)
-  
-  // Clean up expired OTPs
-  setTimeout(() => {
-    otpStore.delete(phone)
-    console.log(`🗑️ OTP expired and removed for ${phone}`)
-  }, 5 * 60 * 1000)
-}
-
-// Verify OTP
-export function verifyOTP(phone: string, code: string): boolean {
-  console.log("=".repeat(80))
-  console.log("🔍 OTP VERIFICATION DEBUG")
-  console.log("=".repeat(80))
-  console.log("Verifying with phone:", phone)
-  console.log("Verifying with code:", code)
-  console.log("OTP Store keys:", Array.from(otpStore.keys()))
-  
-  const stored = otpStore.get(phone)
-  console.log("Stored OTP data:", stored ? { code: stored.code, expiresAt: new Date(stored.expiresAt).toISOString(), isExpired: Date.now() > stored.expiresAt } : "NOT FOUND")
-  
-  if (!stored) {
-    console.log("❌ OTP not found for phone:", phone)
+// Verify OTP from MongoDB
+export async function verifyOTP(phone: string, code: string): Promise<boolean> {
+  try {
+    console.log("=".repeat(80))
+    console.log("🔍 OTP VERIFICATION DEBUG")
+    console.log("=".repeat(80))
+    console.log("Verifying with phone:", phone)
+    console.log("Verifying with code:", code)
+    
+    const db = await getDb()
+    const otpsCollection = db.collection("otps")
+    
+    // Try to find OTP with the phone number
+    let stored = await otpsCollection.findOne({ phone: phone })
+    
+    // If not found, try alternative formats
+    if (!stored) {
+      const phoneWithoutPlus = phone.replace(/^\+/, "")
+      stored = await otpsCollection.findOne({ phone: phoneWithoutPlus })
+    }
+    
+    if (!stored) {
+      const phone254 = phone.startsWith("+254") ? phone.slice(1) : phone
+      stored = await otpsCollection.findOne({ phone: phone254 })
+    }
+    
+    console.log("Stored OTP data:", stored ? { 
+      code: stored.code, 
+      expiresAt: stored.expiresAt?.toISOString(), 
+      isExpired: stored.expiresAt ? new Date() > new Date(stored.expiresAt) : true 
+    } : "NOT FOUND")
+    
+    if (!stored) {
+      console.log("❌ OTP not found for phone:", phone)
+      console.log("=".repeat(80))
+      return false
+    }
+    
+    // Check if expired
+    if (stored.expiresAt && new Date() > new Date(stored.expiresAt)) {
+      console.log("❌ OTP expired")
+      await otpsCollection.deleteOne({ _id: stored._id })
+      console.log("=".repeat(80))
+      return false
+    }
+    
+    // Verify code
+    console.log("Comparing codes - Stored:", stored.code, "Provided:", code, "Match:", stored.code === code)
+    if (stored.code === code) {
+      console.log("✅ OTP verified successfully!")
+      // Remove after successful verification
+      await otpsCollection.deleteOne({ _id: stored._id })
+      console.log("=".repeat(80))
+      return true
+    }
+    
+    console.log("❌ OTP code mismatch")
+    console.log("=".repeat(80))
+    return false
+  } catch (error) {
+    console.error("Error verifying OTP:", error)
     console.log("=".repeat(80))
     return false
   }
-  
-  // Check if expired
-  if (Date.now() > stored.expiresAt) {
-    console.log("❌ OTP expired")
-    otpStore.delete(phone)
-    console.log("=".repeat(80))
-    return false
-  }
-  
-  // Verify code
-  console.log("Comparing codes - Stored:", stored.code, "Provided:", code, "Match:", stored.code === code)
-  if (stored.code === code) {
-    console.log("✅ OTP verified successfully!")
-    otpStore.delete(phone) // Remove after successful verification
-    console.log("=".repeat(80))
-    return true
-  }
-  
-  console.log("❌ OTP code mismatch")
-  console.log("=".repeat(80))
-  return false
 }
 
 // Format phone number for SMS (remove + and ensure proper format)

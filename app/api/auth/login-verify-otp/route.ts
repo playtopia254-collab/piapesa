@@ -32,23 +32,8 @@ export async function POST(request: NextRequest) {
     
     console.log("Formatted phone:", formattedPhone)
 
-    // Try verifying with the formatted phone
-    let isValid = verifyOTP(formattedPhone, code)
-    
-    // If that fails, try alternative formats (in case OTP was stored with different format)
-    if (!isValid) {
-      console.log("First attempt failed, trying without + prefix...")
-      // Try without + prefix
-      const phoneWithoutPlus = formattedPhone.replace(/^\+/, "")
-      isValid = verifyOTP(phoneWithoutPlus, code)
-    }
-    
-    if (!isValid) {
-      console.log("Second attempt failed, trying with 254 prefix (no +)...")
-      // Try with 254 prefix (no +)
-      const phone254 = formattedPhone.startsWith("+254") ? formattedPhone.slice(1) : formattedPhone
-      isValid = verifyOTP(phone254, code)
-    }
+    // Try verifying with the formatted phone (now async, checks DB with multiple formats internally)
+    let isValid = await verifyOTP(formattedPhone, code)
 
     if (!isValid) {
       console.log("❌ All OTP verification attempts failed")

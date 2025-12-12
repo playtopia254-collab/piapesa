@@ -26,12 +26,12 @@ export async function POST(request: NextRequest) {
     // Generate OTP
     const otpCode = generateOTP()
     
-    // Store OTP with normalized format
-    storeOTP(formattedPhone, otpCode)
+    // Store OTP with normalized format in database
+    await storeOTP(formattedPhone, otpCode)
     
     // Also store with alternative format to handle verification mismatches
     const phoneWithoutPlus = formattedPhone.replace(/^\+/, "")
-    storeOTP(phoneWithoutPlus, otpCode)
+    await storeOTP(phoneWithoutPlus, otpCode)
 
     // Send OTP via SMS
     const smsSent = await sendOTPSMS(formattedPhone, otpCode)

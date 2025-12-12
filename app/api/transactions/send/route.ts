@@ -47,6 +47,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check if sender account is locked
+    if (sender.isLocked) {
+      return NextResponse.json(
+        {
+          error: "Your account is locked. You cannot perform transactions.",
+          lockReason: sender.lockReason || "Account locked due to dispute",
+        },
+        { status: 403 }
+      )
+    }
+
     // Check sender balance
     const senderBalance = sender.balance || 0
     if (senderBalance < amountNum) {

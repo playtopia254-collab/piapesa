@@ -746,6 +746,53 @@ export default function AgentDashboardPage() {
                   </p>
                 )}
 
+                {/* Confirmation Status */}
+                {request.status === "in_progress" && (
+                  <div className="bg-blue-50 dark:bg-blue-950 p-3 rounded-lg border border-blue-200">
+                    <p className="text-sm font-semibold mb-2 text-blue-900 dark:text-blue-100">
+                      Confirmation Status:
+                    </p>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm">Agent Confirmed:</span>
+                        <Badge
+                          variant={request.agentConfirmed ? "default" : "secondary"}
+                          className={request.agentConfirmed ? "bg-green-500" : ""}
+                        >
+                          {request.agentConfirmed ? (
+                            <CheckCircle className="h-3 w-3 mr-1" />
+                          ) : (
+                            <Clock className="h-3 w-3 mr-1" />
+                          )}
+                          {request.agentConfirmed ? "Confirmed" : "Pending"}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm">Customer Confirmed:</span>
+                        <Badge
+                          variant={request.userConfirmed ? "default" : "secondary"}
+                          className={request.userConfirmed ? "bg-green-500" : ""}
+                        >
+                          {request.userConfirmed ? (
+                            <CheckCircle className="h-3 w-3 mr-1" />
+                          ) : (
+                            <Clock className="h-3 w-3 mr-1" />
+                          )}
+                          {request.userConfirmed ? "Confirmed" : "Waiting"}
+                        </Badge>
+                      </div>
+                      {request.agentConfirmed && request.userConfirmed && (
+                        <Alert className="mt-2 border-green-500 bg-green-50 dark:bg-green-950">
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <AlertDescription className="text-green-800 dark:text-green-200">
+                            Both parties confirmed! Transaction will complete automatically.
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Action Buttons based on status */}
                 <div className="flex gap-2 pt-2 border-t">
                   {request.status === "matched" && (
@@ -776,31 +823,38 @@ export default function AgentDashboardPage() {
 
                   {request.status === "in_progress" && (
                     <>
-                      <Button
-                        onClick={() => confirmHandover(request._id)}
-                        disabled={actionLoading === request._id}
-                        className="flex-1 bg-orange-500 hover:bg-orange-600"
-                        size="lg"
-                      >
-                        {actionLoading === request._id ? (
-                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        ) : (
-                          <DollarSign className="h-4 w-4 mr-2" />
-                        )}
-                        Cash Given
-                      </Button>
-                      <Button
-                        onClick={() => completeTransaction(request._id)}
-                        disabled={actionLoading === request._id}
-                        className="flex-1 bg-green-500 hover:bg-green-600"
-                        size="lg"
-                      >
-                        {actionLoading === request._id ? (
-                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        ) : (
+                      {!request.agentConfirmed ? (
+                        <Button
+                          onClick={() => confirmHandover(request._id)}
+                          disabled={actionLoading === request._id}
+                          className="flex-1 bg-orange-500 hover:bg-orange-600"
+                          size="lg"
+                        >
+                          {actionLoading === request._id ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : (
+                            <DollarSign className="h-4 w-4 mr-2" />
+                          )}
+                          I've Given Cash
+                        </Button>
+                      ) : (
+                        <Button
+                          disabled
+                          className="flex-1 bg-green-500"
+                          size="lg"
+                        >
                           <CheckCircle className="h-4 w-4 mr-2" />
-                        )}
-                        Complete
+                          You Confirmed
+                        </Button>
+                      )}
+                      <Button
+                        variant="destructive"
+                        onClick={() => cancelRequest(request._id)}
+                        disabled={actionLoading === request._id || (request.agentConfirmed && request.userConfirmed)}
+                        size="lg"
+                      >
+                        <XCircle className="h-4 w-4 mr-2" />
+                        Refuse
                       </Button>
                     </>
                   )}

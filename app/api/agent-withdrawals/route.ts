@@ -129,6 +129,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
+    // Check if user account is locked
+    if (user.isLocked) {
+      return NextResponse.json(
+        {
+          error: "Your account is locked. You cannot perform transactions.",
+          lockReason: user.lockReason || "Account locked due to dispute",
+        },
+        { status: 403 }
+      )
+    }
+
     if ((user.balance || 0) < amountNum) {
       return NextResponse.json({ error: "Insufficient balance" }, { status: 400 })
     }

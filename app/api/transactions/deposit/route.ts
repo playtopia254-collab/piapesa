@@ -47,6 +47,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check if user account is locked
+    if (user.isLocked) {
+      return NextResponse.json(
+        {
+          error: "Your account is locked. You cannot perform transactions.",
+          lockReason: user.lockReason || "Account locked due to dispute",
+        },
+        { status: 403 }
+      )
+    }
+
     // Get user's phone number
     const userPhone = user.phone
     if (!userPhone) {

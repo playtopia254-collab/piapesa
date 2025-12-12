@@ -70,6 +70,12 @@ export async function GET(
         acceptedAt: withdrawalRequest.acceptedAt?.toISOString(),
         completedAt: withdrawalRequest.completedAt?.toISOString(),
         expiresAt: withdrawalRequest.expiresAt?.toISOString(),
+        userConfirmed: withdrawalRequest.userConfirmed || false,
+        agentConfirmed: withdrawalRequest.agentConfirmed || false,
+        userConfirmedAt: withdrawalRequest.userConfirmedAt?.toISOString(),
+        agentConfirmedAt: withdrawalRequest.agentConfirmedAt?.toISOString(),
+        dispute: withdrawalRequest.dispute || false,
+        disputeReason: withdrawalRequest.disputeReason,
       },
     })
   } catch (error) {
@@ -161,11 +167,87 @@ export async function PATCH(
         if (withdrawalRequest.status !== "in_progress") {
           return NextResponse.json({ error: "Invalid request state" }, { status: 400 })
         }
+        
+        // Check if user already confirmed
+        const userAlreadyConfirmed = withdrawalRequest.userConfirmed === true
+        
         updateData = {
           ...updateData,
           agentConfirmed: true,
+          agentConfirmedAt: new Date(),
         }
-        message = "Agent confirmed cash handover. Waiting for user confirmation."
+        
+        // If both confirmed, auto-complete
+        if (userAlreadyConfirmed) {
+          // Both confirmed - complete transaction
+          const userToUpdate = await usersCollection.findOne({
+            _id: withdrawalRequest.userId,
+          })
+          if (!userToUpdate || (userToUpdate.balance || 0) < withdrawalRequest.amount) {
+            return NextResponse.json({ error: "Insufficient balance" }, { status: 400 })
+          }
+
+          const agentToCredit = await usersCollection.findOne({
+            _id: withdrawalRequest.agentId,
+          })
+          if (!agentToCredit) {
+            return NextResponse.json({ error: "Agent not found" }, { status: 404 })
+          }
+
+          // Deduct from user balance
+          await usersCollection.updateOne(
+            { _id: withdrawalRequest.userId },
+            { $inc: { balance: -withdrawalRequest.amount } }
+          )
+
+          // Add to agent balance
+          await usersCollection.updateOne(
+            { _id: withdrawalRequest.agentId },
+            { $inc: { balance: withdrawalRequest.amount } }
+          )
+
+          // Create transaction records
+          await transactionsCollection.insertOne({
+            userId: withdrawalRequest.userId,
+            fromUserId: withdrawalRequest.userId,
+            toUserId: withdrawalRequest.agentId,
+            amount: withdrawalRequest.amount,
+            type: "agent_withdrawal",
+            network: "Agent",
+            purpose: `Cash withdrawal from agent ${agentToCredit.name}`,
+            status: "completed",
+            agentWithdrawalRequestId: withdrawalRequest._id,
+            agentId: withdrawalRequest.agentId,
+            agentName: agentToCredit.name,
+            createdAt: new Date(),
+            completedAt: new Date(),
+          })
+
+          await transactionsCollection.insertOne({
+            userId: withdrawalRequest.agentId,
+            fromUserId: withdrawalRequest.userId,
+            toUserId: withdrawalRequest.agentId,
+            amount: withdrawalRequest.amount,
+            type: "agent_receive",
+            network: "Agent",
+            purpose: `Received from ${userToUpdate.name} for cash withdrawal`,
+            status: "completed",
+            agentWithdrawalRequestId: withdrawalRequest._id,
+            customerId: withdrawalRequest.userId,
+            customerName: userToUpdate.name,
+            createdAt: new Date(),
+            completedAt: new Date(),
+          })
+
+          updateData = {
+            ...updateData,
+            status: "completed",
+            completedAt: new Date(),
+          }
+          message = `Withdrawal completed! KES ${withdrawalRequest.amount} transferred to agent.`
+        } else {
+          message = "Agent confirmed cash handover. Waiting for user confirmation."
+        }
         break
 
       case "user_confirm":
@@ -173,17 +255,101 @@ export async function PATCH(
         if (withdrawalRequest.status !== "in_progress") {
           return NextResponse.json({ error: "Invalid request state" }, { status: 400 })
         }
+        
+        // Check if agent already confirmed
+        const agentAlreadyConfirmed = withdrawalRequest.agentConfirmed === true
+        
         updateData = {
           ...updateData,
           userConfirmed: true,
+          userConfirmedAt: new Date(),
         }
-        message = "User confirmed receiving cash."
+        
+        // If both confirmed, auto-complete
+        if (agentAlreadyConfirmed) {
+          // Both confirmed - complete transaction
+          const userToUpdate = await usersCollection.findOne({
+            _id: withdrawalRequest.userId,
+          })
+          if (!userToUpdate || (userToUpdate.balance || 0) < withdrawalRequest.amount) {
+            return NextResponse.json({ error: "Insufficient balance" }, { status: 400 })
+          }
+
+          const agentToCredit = await usersCollection.findOne({
+            _id: withdrawalRequest.agentId,
+          })
+          if (!agentToCredit) {
+            return NextResponse.json({ error: "Agent not found" }, { status: 404 })
+          }
+
+          // Deduct from user balance
+          await usersCollection.updateOne(
+            { _id: withdrawalRequest.userId },
+            { $inc: { balance: -withdrawalRequest.amount } }
+          )
+
+          // Add to agent balance
+          await usersCollection.updateOne(
+            { _id: withdrawalRequest.agentId },
+            { $inc: { balance: withdrawalRequest.amount } }
+          )
+
+          // Create transaction records
+          await transactionsCollection.insertOne({
+            userId: withdrawalRequest.userId,
+            fromUserId: withdrawalRequest.userId,
+            toUserId: withdrawalRequest.agentId,
+            amount: withdrawalRequest.amount,
+            type: "agent_withdrawal",
+            network: "Agent",
+            purpose: `Cash withdrawal from agent ${agentToCredit.name}`,
+            status: "completed",
+            agentWithdrawalRequestId: withdrawalRequest._id,
+            agentId: withdrawalRequest.agentId,
+            agentName: agentToCredit.name,
+            createdAt: new Date(),
+            completedAt: new Date(),
+          })
+
+          await transactionsCollection.insertOne({
+            userId: withdrawalRequest.agentId,
+            fromUserId: withdrawalRequest.userId,
+            toUserId: withdrawalRequest.agentId,
+            amount: withdrawalRequest.amount,
+            type: "agent_receive",
+            network: "Agent",
+            purpose: `Received from ${userToUpdate.name} for cash withdrawal`,
+            status: "completed",
+            agentWithdrawalRequestId: withdrawalRequest._id,
+            customerId: withdrawalRequest.userId,
+            customerName: userToUpdate.name,
+            createdAt: new Date(),
+            completedAt: new Date(),
+          })
+
+          updateData = {
+            ...updateData,
+            status: "completed",
+            completedAt: new Date(),
+          }
+          message = `Withdrawal completed! KES ${withdrawalRequest.amount} transferred to agent.`
+        } else {
+          message = "User confirmed receiving cash. Waiting for agent confirmation."
+        }
         break
 
       case "complete":
         // Complete the transaction (after both confirmations)
         if (withdrawalRequest.status !== "in_progress") {
           return NextResponse.json({ error: "Invalid request state" }, { status: 400 })
+        }
+
+        // Verify both parties confirmed
+        if (!withdrawalRequest.agentConfirmed || !withdrawalRequest.userConfirmed) {
+          return NextResponse.json(
+            { error: "Both parties must confirm before completing" },
+            { status: 400 }
+          )
         }
 
         // Verify user has sufficient balance
@@ -252,26 +418,76 @@ export async function PATCH(
           ...updateData,
           status: "completed",
           completedAt: new Date(),
-          userConfirmed: true,
-          agentConfirmed: true,
         }
         message = `Withdrawal completed! KES ${withdrawalRequest.amount} transferred to agent.`
         break
 
       case "cancel":
-        // Cancel the request
+        // Cancel the request - handle dispute if one party already confirmed
         if (["completed", "cancelled"].includes(withdrawalRequest.status)) {
           return NextResponse.json({ error: "Cannot cancel this request" }, { status: 400 })
         }
+        
         const { cancelReason } = body
+        const cancellerId = userId || agentId
+        const isUserCancelling = !!userId
+        const isAgentCancelling = !!agentId
+        
+        // Check if this is a dispute (one party confirmed, other is cancelling)
+        const isDispute = 
+          (withdrawalRequest.agentConfirmed && isUserCancelling) ||
+          (withdrawalRequest.userConfirmed && isAgentCancelling)
+        
         updateData = {
           ...updateData,
           status: "cancelled",
           cancelledAt: new Date(),
-          cancelledBy: userId || agentId,
+          cancelledBy: cancellerId,
           cancelReason: cancelReason || "No reason provided",
         }
-        message = "Request cancelled."
+        
+        // If dispute, lock both accounts
+        if (isDispute) {
+          const lockReason = `Dispute in withdrawal request ${requestId}: ${cancelReason || "One party refused after the other confirmed"}`
+          
+          // Lock user account
+          await usersCollection.updateOne(
+            { _id: withdrawalRequest.userId },
+            {
+              $set: {
+                isLocked: true,
+                lockReason: lockReason,
+                lockedAt: new Date(),
+                lockedBy: "system",
+              },
+            }
+          )
+          
+          // Lock agent account
+          if (withdrawalRequest.agentId) {
+            await usersCollection.updateOne(
+              { _id: withdrawalRequest.agentId },
+              {
+                $set: {
+                  isLocked: true,
+                  lockReason: lockReason,
+                  lockedAt: new Date(),
+                  lockedBy: "system",
+                },
+              }
+            )
+          }
+          
+          updateData = {
+            ...updateData,
+            dispute: true,
+            disputeReason: lockReason,
+          }
+          
+          message = "Request cancelled. Both accounts have been locked due to dispute. Contact support to resolve."
+        } else {
+          message = "Request cancelled."
+        }
         break
 
       default:
@@ -334,6 +550,12 @@ export async function PATCH(
         updatedAt: updatedRequest?.updatedAt?.toISOString(),
         acceptedAt: updatedRequest?.acceptedAt?.toISOString(),
         completedAt: updatedRequest?.completedAt?.toISOString(),
+        userConfirmed: updatedRequest?.userConfirmed || false,
+        agentConfirmed: updatedRequest?.agentConfirmed || false,
+        userConfirmedAt: updatedRequest?.userConfirmedAt?.toISOString(),
+        agentConfirmedAt: updatedRequest?.agentConfirmedAt?.toISOString(),
+        dispute: updatedRequest?.dispute || false,
+        disputeReason: updatedRequest?.disputeReason,
       },
       userBalance: userData?.balance,
       agentBalance: agentData?.balance,

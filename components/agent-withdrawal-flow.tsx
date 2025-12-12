@@ -913,6 +913,53 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
               </div>
             </div>
 
+            {/* Confirmation Status */}
+            {step === "in_progress" && (
+              <div className="bg-blue-50 dark:bg-blue-950 p-3 rounded-lg border border-blue-200">
+                <p className="text-sm font-semibold mb-2 text-blue-900 dark:text-blue-100">
+                  Confirmation Status:
+                </p>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Agent Confirmed:</span>
+                    <Badge
+                      variant={request?.agentConfirmed ? "default" : "secondary"}
+                      className={request?.agentConfirmed ? "bg-green-500" : ""}
+                    >
+                      {request?.agentConfirmed ? (
+                        <CheckCircle className="h-3 w-3 mr-1" />
+                      ) : (
+                        <Clock className="h-3 w-3 mr-1" />
+                      )}
+                      {request?.agentConfirmed ? "Confirmed" : "Waiting"}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">You Confirmed:</span>
+                    <Badge
+                      variant={request?.userConfirmed ? "default" : "secondary"}
+                      className={request?.userConfirmed ? "bg-green-500" : ""}
+                    >
+                      {request?.userConfirmed ? (
+                        <CheckCircle className="h-3 w-3 mr-1" />
+                      ) : (
+                        <Clock className="h-3 w-3 mr-1" />
+                      )}
+                      {request?.userConfirmed ? "Confirmed" : "Pending"}
+                    </Badge>
+                  </div>
+                  {request?.agentConfirmed && request?.userConfirmed && (
+                    <Alert className="mt-2 border-green-500 bg-green-50 dark:bg-green-950">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      <AlertDescription className="text-green-800 dark:text-green-200">
+                        Both parties confirmed! Transaction will complete automatically.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Instructions */}
             <Alert>
               <AlertCircle className="h-4 w-4" />
@@ -924,6 +971,11 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
                 ) : (
                   <>
                     The agent should be with you now. Once you receive the cash, tap "I've Received Cash" below.
+                    {request?.agentConfirmed && !request?.userConfirmed && (
+                      <span className="block mt-2 font-semibold text-orange-600">
+                        ⚠️ Agent has confirmed giving cash. Please confirm if you received it.
+                      </span>
+                    )}
                   </>
                 )}
               </AlertDescription>
@@ -931,19 +983,41 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
 
             {/* Action buttons */}
             {step === "in_progress" && (
-              <Button
-                onClick={confirmReceipt}
-                disabled={isLoading}
-                className="w-full bg-green-500 hover:bg-green-600"
-                size="lg"
-              >
-                {isLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              <>
+                {!request?.userConfirmed ? (
+                  <Button
+                    onClick={confirmReceipt}
+                    disabled={isLoading}
+                    className="w-full bg-green-500 hover:bg-green-600"
+                    size="lg"
+                  >
+                    {isLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    ) : (
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                    )}
+                    I've Received Cash
+                  </Button>
                 ) : (
-                  <CheckCircle className="h-4 w-4 mr-2" />
+                  <Button
+                    disabled
+                    className="w-full bg-green-500"
+                    size="lg"
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    You Confirmed
+                  </Button>
                 )}
-                I've Received Cash
-              </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => setShowCancelDialog(true)}
+                  disabled={isLoading || (request?.agentConfirmed && request?.userConfirmed)}
+                  className="w-full"
+                >
+                  <XCircle className="h-4 w-4 mr-2" />
+                  Refuse / Cancel
+                </Button>
+              </>
             )}
 
             <Button

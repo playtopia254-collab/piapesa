@@ -45,7 +45,7 @@ export default function TransactionsPage() {
             
             // Fetch transactions from API
             if (userData.id) {
-              try {
+        try {
                 const response = await fetch(`/api/transactions?userId=${userData.id}`)
                 if (response.ok) {
                   const data = await response.json()
@@ -56,8 +56,8 @@ export default function TransactionsPage() {
                 } else {
                   console.error("Failed to load transactions")
                 }
-              } catch (error) {
-                console.error("Failed to load transactions:", error)
+        } catch (error) {
+          console.error("Failed to load transactions:", error)
               }
             }
           } catch (error) {
@@ -104,6 +104,8 @@ export default function TransactionsPage() {
     if (transaction.type === "receive") return <ArrowDownRight className="w-4 h-4 text-green-500" />
     if (transaction.type === "deposit") return <ArrowUpCircle className="w-4 h-4 text-green-500" />
     if (transaction.type === "withdrawal") return <Download className="w-4 h-4 text-blue-500" />
+    if (transaction.type === "agent_withdrawal") return <Download className="w-4 h-4 text-orange-500" />
+    if (transaction.type === "agent_receive") return <ArrowDownRight className="w-4 h-4 text-green-500" />
     return <Clock className="w-4 h-4 text-muted-foreground" />
   }
 
@@ -114,7 +116,9 @@ export default function TransactionsPage() {
   }
 
   const getTransactionAmount = (transaction: Transaction) => {
-    if (transaction.type === "receive" || transaction.type === "deposit") return transaction.amount
+    // Money coming in (positive)
+    if (["receive", "deposit", "agent_receive"].includes(transaction.type)) return transaction.amount
+    // Money going out (negative)
     return -transaction.amount
   }
 
@@ -129,7 +133,13 @@ export default function TransactionsPage() {
       return `Deposit to wallet`
     }
     if (transaction.type === "withdrawal") {
-      return "Cash withdrawal"
+      return "Cash withdrawal via M-Pesa"
+    }
+    if (transaction.type === "agent_withdrawal") {
+      return `Cash from Agent ${(transaction as any).agentName || ""}`
+    }
+    if (transaction.type === "agent_receive") {
+      return `Cash out to ${(transaction as any).customerName || "Customer"}`
     }
     return "Transaction"
   }
@@ -225,7 +235,9 @@ export default function TransactionsPage() {
                   <SelectItem value="send">Sent</SelectItem>
                   <SelectItem value="receive">Received</SelectItem>
                   <SelectItem value="deposit">Deposits</SelectItem>
-                  <SelectItem value="withdrawal">Withdrawals</SelectItem>
+                  <SelectItem value="withdrawal">M-Pesa Withdrawals</SelectItem>
+                  <SelectItem value="agent_withdrawal">Agent Cash Outs</SelectItem>
+                  <SelectItem value="agent_receive">Agent Earnings</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -6,13 +6,13 @@ export function generateOTP(): string {
   return Math.floor(100000 + Math.random() * 900000).toString()
 }
 
-// Store OTP with expiration (5 minutes) in MongoDB
+// Store OTP with expiration (59 seconds) in MongoDB
 export async function storeOTP(phone: string, code: string): Promise<void> {
   try {
     const db = await getDb()
     const otpsCollection = db.collection("otps")
     
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000) // 5 minutes from now
+    const expiresAt = new Date(Date.now() + 59 * 1000) // 59 seconds from now
     
     // Store OTP in database (upsert to replace any existing OTP for this phone)
     await otpsCollection.updateOne(
@@ -148,7 +148,7 @@ export async function sendOTPSMS(phone: string, otpCode: string): Promise<boolea
     const zettatelApiUrl = "https://portal.zettatel.com/SMSApi/send"
 
     // Prepare SMS message
-    const message = `Your Pia Pesa verification code is: ${otpCode}. This code expires in 5 minutes. Do not share this code with anyone.`
+    const message = `Your Pia Pesa verification code is: ${otpCode}. This code expires in 59 seconds. Do not share this code with anyone.`
 
     // Build URL-encoded form data (as per Zettatel API documentation)
     // Note: API requires lowercase 'userid' not 'userId'

@@ -28,7 +28,7 @@ export default function DashboardPage() {
 
         // Fetch latest balance from database
         if (userData.id) {
-          try {
+        try {
             const balanceResponse = await fetch(`/api/user/balance?userId=${userData.id}`)
             if (balanceResponse.ok) {
               const balanceData = await balanceResponse.json()
@@ -83,7 +83,7 @@ export default function DashboardPage() {
         console.error("Failed to load user:", error)
         window.location.href = "/login"
       } finally {
-        setIsLoading(false)
+      setIsLoading(false)
       }
 
       return () => {

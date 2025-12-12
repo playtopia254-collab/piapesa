@@ -66,7 +66,7 @@ export default function SendMoneyPage() {
           router.push("/login")
         }
       } else {
-        router.push("/login")
+      router.push("/login")
       }
     }
   }, [router])
@@ -127,10 +127,10 @@ export default function SendMoneyPage() {
         },
         body: JSON.stringify({
           fromUserId: user.id,
-          toPhone: formData.toPhone,
-          amount: Number.parseFloat(formData.amount),
-          network: formData.network,
-          purpose: formData.purpose || undefined,
+        toPhone: formData.toPhone,
+        amount: Number.parseFloat(formData.amount),
+        network: formData.network,
+        purpose: formData.purpose || undefined,
         }),
       })
 
@@ -163,7 +163,7 @@ export default function SendMoneyPage() {
       }
 
       setTransaction(newTransaction)
-      
+
       // Store transaction details including recipient info
       setTransactionDetails({
         ...transferData.transaction,
@@ -181,8 +181,8 @@ export default function SendMoneyPage() {
 
       // If external transfer is still pending, we could poll status here (optional)
 
-      setStep(4) // Move to receipt
-      setIsLoading(false)
+        setStep(4) // Move to receipt
+        setIsLoading(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Transaction failed")
       setStep(2) // Back to confirmation
@@ -236,7 +236,7 @@ export default function SendMoneyPage() {
                   : "bg-yellow-100"
             }`}>
               {transaction.status === "completed" ? (
-                <CheckCircle className="w-8 h-8 text-green-600" />
+              <CheckCircle className="w-8 h-8 text-green-600" />
               ) : transaction.status === "failed" ? (
                 <AlertCircle className="w-8 h-8 text-red-600" />
               ) : (
@@ -586,13 +586,13 @@ export default function SendMoneyPage() {
                   {mockData.networks
                     .filter((n) => n.name !== "M-Pesa" && n.name !== "Bank Transfer")
                     .map((network) => (
-                      <SelectItem key={network.id} value={network.name}>
-                        <div className="flex items-center space-x-2">
-                          <span>{network.icon}</span>
-                          <span>{network.name}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
+                    <SelectItem key={network.id} value={network.name}>
+                      <div className="flex items-center space-x-2">
+                        <span>{network.icon}</span>
+                        <span>{network.name}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

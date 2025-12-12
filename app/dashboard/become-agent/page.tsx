@@ -18,48 +18,20 @@ import {
   Star,
   Clock,
   CheckCircle,
-  XCircle,
   AlertCircle,
   Users,
   TrendingUp,
   MapPin,
-  Phone,
 } from "lucide-react"
 import Link from "next/link"
 import { mockApi, type User } from "@/lib/mock-api"
 import { CurrencyFormatter } from "@/components/currency-formatter"
-import { PhoneFormatter } from "@/components/phone-formatter"
-
-// Mock agent requests data
-const mockAgentRequests = [
-  {
-    id: "req_001",
-    userId: "user_001",
-    userName: "John Kamau",
-    userPhone: "+254712345678",
-    amount: 3000,
-    status: "pending",
-    createdAt: "2024-01-21T10:00:00Z",
-    location: "Nairobi CBD",
-  },
-  {
-    id: "req_002",
-    userId: "user_004",
-    userName: "Sarah Mwangi",
-    userPhone: "+254734567890",
-    amount: 1500,
-    status: "pending",
-    createdAt: "2024-01-21T11:30:00Z",
-    location: "Westlands",
-  },
-]
 
 export default function BecomeAgentPage() {
   const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
-  const [agentRequests, setAgentRequests] = useState(mockAgentRequests)
   const [formData, setFormData] = useState({
     idNumber: "",
     location: "",
@@ -94,39 +66,39 @@ export default function BecomeAgentPage() {
     setError("")
 
     try {
-      // Simulate agent application
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      const response = await fetch("/api/agents/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user?.id,
+          idNumber: formData.idNumber,
+          location: formData.location,
+          preferredNetworks: formData.preferredNetworks,
+          maxAmount: formData.maxAmount,
+        }),
+      })
 
-      // Update user to be an agent
-      if (user) {
-        const updatedUser = { ...user, isAgent: true, location: formData.location, rating: 5.0 }
-        setUser(updatedUser)
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to submit application")
       }
 
-      alert("Agent application submitted successfully! You are now an agent.")
+      // Update local user state
+      if (data.user) {
+        const updatedUser = { ...user, ...data.user }
+        setUser(updatedUser as User)
+        // Update session storage
+        sessionStorage.setItem("currentUser", JSON.stringify(updatedUser))
+      }
+
+      alert("Congratulations! You are now registered as an agent. Go to Agent Dashboard to start accepting requests.")
+      router.push("/dashboard/agent-dashboard")
     } catch (err) {
-      setError("Failed to submit agent application")
+      setError(err instanceof Error ? err.message : "Failed to submit agent application")
     } finally {
       setIsLoading(false)
     }
-  }
-
-  const handleRequestAction = async (requestId: string, action: "accept" | "reject") => {
-    setAgentRequests((prev) =>
-      prev.map((req) =>
-        req.id === requestId ? { ...req, status: action === "accept" ? "accepted" : "rejected" } : req,
-      ),
-    )
-
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 500))
-  }
-
-  const handleCompleteRequest = async (requestId: string) => {
-    setAgentRequests((prev) => prev.map((req) => (req.id === requestId ? { ...req, status: "completed" } : req)))
-
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 500))
   }
 
   if (!user) {
@@ -140,162 +112,31 @@ export default function BecomeAgentPage() {
     )
   }
 
-  // Agent Dashboard
+  // If user is already an agent, redirect to agent dashboard
   if (user.isAgent) {
-    const pendingRequests = agentRequests.filter((req) => req.status === "pending")
-    const acceptedRequests = agentRequests.filter((req) => req.status === "accepted")
-    const completedRequests = agentRequests.filter((req) => req.status === "completed")
-
     return (
-      <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold">Agent Dashboard</h1>
-            <p className="text-muted-foreground">Manage your agent activities and earnings</p>
+      <div className="max-w-md mx-auto space-y-6 text-center">
+        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+          <CheckCircle className="w-8 h-8 text-green-600" />
           </div>
-          <Badge variant="secondary" className="w-fit">
+        <h1 className="text-2xl font-bold">You're Already an Agent!</h1>
+        <p className="text-muted-foreground">
+          You're already registered as an agent. Go to your Agent Dashboard to manage requests.
+        </p>
+        <div className="flex items-center justify-center gap-2">
+          <Badge variant="secondary" className="text-sm">
             <Star className="w-3 h-3 mr-1 fill-yellow-400 text-yellow-400" />
-            Agent Rating: {user.rating?.toFixed(1) || "5.0"}
+            Rating: {user.rating?.toFixed(1) || "5.0"}
+          </Badge>
+          <Badge variant="outline" className="text-sm">
+            <MapPin className="w-3 h-3 mr-1" />
+            {user.location || "Location not set"}
           </Badge>
         </div>
-
-        {/* Agent Stats */}
-        <div className="grid gap-4 md:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Requests</CardTitle>
-              <Clock className="w-4 h-4 text-yellow-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-yellow-600">{pendingRequests.length}</div>
-              <p className="text-xs text-muted-foreground">Awaiting your response</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Requests</CardTitle>
-              <Users className="w-4 h-4 text-blue-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-blue-600">{acceptedRequests.length}</div>
-              <p className="text-xs text-muted-foreground">In progress</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Completed Today</CardTitle>
-              <CheckCircle className="w-4 h-4 text-green-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">{completedRequests.length}</div>
-              <p className="text-xs text-muted-foreground">Transactions completed</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Today's Earnings</CardTitle>
-              <TrendingUp className="w-4 h-4 text-primary" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-primary">
-                <CurrencyFormatter amount={450} />
-              </div>
-              <p className="text-xs text-muted-foreground">Commission earned</p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Withdrawal Requests */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Withdrawal Requests</CardTitle>
-            <CardDescription>Manage incoming withdrawal requests from users</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {agentRequests.length === 0 ? (
-              <div className="text-center py-8">
-                <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Users className="w-6 h-6 text-muted-foreground" />
-                </div>
-                <p className="text-muted-foreground">No withdrawal requests</p>
-                <p className="text-sm text-muted-foreground">New requests will appear here</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {agentRequests.map((request) => (
-                  <div
-                    key={request.id}
-                    className="flex items-center justify-between p-4 border border-border rounded-lg"
-                  >
-                    <div className="flex items-center space-x-4">
-                      <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                        <Users className="w-5 h-5 text-primary" />
-                      </div>
-                      <div>
-                        <h3 className="font-medium">{request.userName}</h3>
-                        <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                          <Phone className="w-3 h-3" />
-                          <PhoneFormatter phone={request.userPhone} />
-                        </div>
-                        <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                          <MapPin className="w-3 h-3" />
-                          <span>{request.location}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-right space-y-2">
-                      <div>
-                        <p className="text-lg font-semibold">
-                          <CurrencyFormatter amount={request.amount} />
-                        </p>
-                        <p className="text-xs text-muted-foreground">{new Date(request.createdAt).toLocaleString()}</p>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        {request.status === "pending" && (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleRequestAction(request.id, "reject")}
-                            >
-                              <XCircle className="w-3 h-3 mr-1" />
-                              Reject
-                            </Button>
-                            <Button size="sm" onClick={() => handleRequestAction(request.id, "accept")}>
-                              <CheckCircle className="w-3 h-3 mr-1" />
-                              Accept
-                            </Button>
-                          </>
-                        )}
-                        {request.status === "accepted" && (
-                          <Button size="sm" onClick={() => handleCompleteRequest(request.id)}>
-                            <CheckCircle className="w-3 h-3 mr-1" />
-                            Complete
+        <Button onClick={() => router.push("/dashboard/agent-dashboard")} className="w-full">
+          <Users className="w-4 h-4 mr-2" />
+          Go to Agent Dashboard
                           </Button>
-                        )}
-                        {request.status === "completed" && (
-                          <Badge variant="secondary" className="bg-green-100 text-green-700">
-                            <CheckCircle className="w-3 h-3 mr-1" />
-                            Completed
-                          </Badge>
-                        )}
-                        {request.status === "rejected" && (
-                          <Badge variant="secondary" className="bg-red-100 text-red-700">
-                            <XCircle className="w-3 h-3 mr-1" />
-                            Rejected
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
       </div>
     )
   }

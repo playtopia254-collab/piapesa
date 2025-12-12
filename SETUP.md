@@ -14,6 +14,9 @@ CHAMBU_MERCHANT_ID=MERCHANT_1765522848334_d38132
 
 # MongoDB Connection (Required for real transactions)
 MONGODB_URI=your_mongodb_connection_string_here
+
+# Google Maps API (Required for Uber-like agent tracking)
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=AIzaSyCUye5Of2MtmvhnWrA96k3DDk9Rv6GnGAA
 ```
 
 ### 2. Chambu Digital API Credentials
@@ -49,6 +52,20 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 ✅ **Balance Updates**: Real-time balance updates in MongoDB
 ✅ **Transaction Tracking**: All transactions recorded in database
 ✅ **Multi-Network Support**: M-Pesa, Airtel Money, T-Kash
+✅ **Uber-Like Agent Tracking**: Google Maps with real-time agent location, routes, and car icons
+
+### Google Maps API Key
+
+Your Google Maps API key is configured:
+- **API Key**: `AIzaSyCUye5Of2MtmvhnWrA96k3DDk9Rv6GnGAA`
+
+**Important**: 
+- Make sure you've enabled these 4 APIs in Google Cloud Console:
+  - Maps JavaScript API
+  - Geocoding API
+  - Directions API
+  - Distance Matrix API
+- See `GOOGLE_MAPS_SETUP.md` for detailed setup instructions
 
 ## Testing
 

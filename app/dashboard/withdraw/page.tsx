@@ -25,12 +25,14 @@ import {
   Users,
   Building,
   Smartphone,
+  XCircle,
 } from "lucide-react"
 import Link from "next/link"
 import { mockApi, type User, type Agent, type WithdrawalRequest } from "@/lib/mock-api"
 import { CurrencyFormatter } from "@/components/currency-formatter"
 import { PhoneFormatter } from "@/components/phone-formatter"
 import { dispatchBalanceUpdate, pollBalance } from "@/lib/balance-updater"
+import { AgentWithdrawalFlow } from "@/components/agent-withdrawal-flow"
 
 export default function WithdrawPage() {
   const router = useRouter()
@@ -47,6 +49,8 @@ export default function WithdrawPage() {
   const [withdrawalDetails, setWithdrawalDetails] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const [showAgentFlow, setShowAgentFlow] = useState(false)
+  const [activeRequest, setActiveRequest] = useState<any>(null)
 
   useEffect(() => {
     // Get user from sessionStorage
@@ -60,15 +64,69 @@ export default function WithdrawPage() {
           if (userData.phone && !phoneNumber) {
             setPhoneNumber(userData.phone.replace("+254", "0"))
           }
+          // Check for active withdrawal requests
+          if (userData.id) {
+            checkActiveRequest(userData.id)
+          }
         } catch (e) {
           console.error("Failed to parse user from session:", e)
           router.push("/login")
         }
       } else {
-        router.push("/login")
+      router.push("/login")
       }
     }
   }, [router])
+
+  // Check for active withdrawal requests
+  const checkActiveRequest = async (userId: string) => {
+    try {
+      const response = await fetch(`/api/agent-withdrawals?userId=${userId}`)
+      const data = await response.json()
+      
+      if (data.success && data.requests && data.requests.length > 0) {
+        // Find active requests (pending, matched, in_progress)
+        const active = data.requests.find(
+          (req: any) => ["pending", "matched", "in_progress"].includes(req.status)
+        )
+        if (active) {
+          setActiveRequest(active)
+        }
+      }
+    } catch (error) {
+      console.error("Failed to check active request:", error)
+    }
+  }
+
+  // Cancel active withdrawal request
+  const cancelActiveRequest = async (requestId: string) => {
+    setIsLoading(true)
+    setError("")
+
+    try {
+      const response = await fetch(`/api/agent-withdrawals/${requestId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "cancel",
+          userId: user?.id,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to cancel request")
+      }
+
+      setActiveRequest(null)
+      alert("Withdrawal request cancelled successfully")
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Failed to cancel request")
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const loadAgents = async () => {
     try {
@@ -248,12 +306,12 @@ export default function WithdrawPage() {
         setIsLoading(false)
       } else if (withdrawalMethod === "Via Agent") {
         // Use mock API for agent-based withdrawals
-        const request = await mockApi.requestWithdrawal({
-          amount: withdrawalAmount,
-          method: withdrawalMethod,
-        })
+      const request = await mockApi.requestWithdrawal({
+        amount: withdrawalAmount,
+        method: withdrawalMethod,
+      })
 
-        setWithdrawalRequest(request)
+      setWithdrawalRequest(request)
         await loadAgents()
         setStep(3) // Move to agent matching
         setIsLoading(false)
@@ -272,7 +330,7 @@ export default function WithdrawPage() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Withdrawal request failed")
-      setIsLoading(false)
+        setIsLoading(false)
     }
   }
 
@@ -349,7 +407,7 @@ export default function WithdrawPage() {
                   ? "Your withdrawal has been processed successfully"
                   : withdrawalRequest?.status === "cancelled"
                     ? "The withdrawal could not be completed"
-                    : "Your withdrawal request is being processed"}
+                : "Your withdrawal request is being processed"}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -744,7 +802,28 @@ export default function WithdrawPage() {
     )
   }
 
-  // Method selection step
+  // Method selection step - show Agent Flow if active
+  if (showAgentFlow && user) {
+    return (
+      <div className="max-w-md mx-auto space-y-6">
+        <AgentWithdrawalFlow
+          user={{
+            id: user.id,
+            name: user.name,
+            phone: user.phone,
+            balance: user.balance,
+            location: user.location,
+          }}
+          onComplete={() => {
+            setShowAgentFlow(false)
+            router.push("/dashboard")
+          }}
+          onCancel={() => setShowAgentFlow(false)}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="text-center">
@@ -759,10 +838,84 @@ export default function WithdrawPage() {
         <p className="text-muted-foreground">Choose how you'd like to access your cash</p>
       </div>
 
+      {/* Show active withdrawal request if exists */}
+      {activeRequest && (
+        <Card className="border-orange-500 bg-orange-50 dark:bg-orange-950">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-orange-700 dark:text-orange-300">
+              <Clock className="h-5 w-5" />
+              Active Withdrawal Request
+            </CardTitle>
+            <CardDescription>
+              You have an active withdrawal request. Cancel it to create a new one.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 space-y-2">
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">Amount</span>
+                <span className="font-semibold">
+                  <CurrencyFormatter amount={activeRequest.amount} />
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">Status</span>
+                <Badge
+                  variant="outline"
+                  className={
+                    activeRequest.status === "pending"
+                      ? "bg-yellow-100 text-yellow-700"
+                      : activeRequest.status === "matched"
+                        ? "bg-blue-100 text-blue-700"
+                        : "bg-orange-100 text-orange-700"
+                  }
+                >
+                  {activeRequest.status === "pending"
+                    ? "Pending"
+                    : activeRequest.status === "matched"
+                      ? "Matched"
+                      : "In Progress"}
+                </Badge>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">Location</span>
+                <span className="text-sm">{activeRequest.location}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-sm text-muted-foreground">Created</span>
+                <span className="text-sm">
+                  {new Date(activeRequest.createdAt).toLocaleString()}
+                </span>
+              </div>
+            </div>
+            <Button
+              variant="destructive"
+              onClick={() => cancelActiveRequest(activeRequest._id)}
+              disabled={isLoading}
+              className="w-full"
+            >
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <XCircle className="h-4 w-4 mr-2" />
+              )}
+              Cancel This Request
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
       <div className="grid gap-4 md:grid-cols-3">
         <Card
-          className="hover:shadow-md transition-shadow cursor-pointer"
-          onClick={() => handleMethodSelect("Via Agent")}
+          className="hover:shadow-md transition-shadow cursor-pointer border-2 border-transparent hover:border-primary"
+          onClick={() => setShowAgentFlow(true)}
         >
           <CardHeader className="text-center">
             <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-4">
@@ -775,7 +928,7 @@ export default function WithdrawPage() {
             <div className="space-y-2 text-sm text-muted-foreground">
               <div className="flex items-center space-x-2">
                 <CheckCircle className="w-4 h-4 text-green-500" />
-                <span>Instant matching</span>
+                <span>Uber-like matching</span>
               </div>
               <div className="flex items-center space-x-2">
                 <CheckCircle className="w-4 h-4 text-green-500" />

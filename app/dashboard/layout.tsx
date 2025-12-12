@@ -43,7 +43,7 @@ const navigation = [
   { name: "Send Money", href: "/dashboard/send", icon: Send },
   { name: "Withdraw", href: "/dashboard/withdraw", icon: Download },
   { name: "Transactions", href: "/dashboard/transactions", icon: FileText },
-  { name: "Agent Requests", href: "/dashboard/agent-requests", icon: Users },
+  { name: "Agent Dashboard", href: "/dashboard/agent-dashboard", icon: Users, agentOnly: true },
   { name: "Become Agent", href: "/dashboard/become-agent", icon: UserCheck },
   { name: "Help & Support", href: "/dashboard/support", icon: HelpCircle },
   { name: "Settings", href: "/dashboard/settings", icon: Settings },
@@ -156,7 +156,7 @@ export default function DashboardLayout({
     }
 
     // If no user found, redirect to login
-    router.push("/login")
+      router.push("/login")
 
     return () => {
       if (cleanup) cleanup()
@@ -208,7 +208,9 @@ export default function DashboardLayout({
               </Button>
             </div>
             <nav className="p-4 space-y-2 flex-1">
-              {navigation.map((item) => {
+              {navigation
+                .filter((item) => !item.agentOnly || user?.isAgent)
+                .map((item) => {
                 const isActive = pathname === item.href
                 return (
                   <Link
@@ -255,7 +257,9 @@ export default function DashboardLayout({
           <span className="text-xl font-bold">Pia Pesa</span>
         </div>
         <nav className="p-4 space-y-2 flex-1">
-          {navigation.map((item) => {
+          {navigation
+            .filter((item) => !item.agentOnly || user?.isAgent)
+            .map((item) => {
             const isActive = pathname === item.href
             return (
               <Link
@@ -270,6 +274,11 @@ export default function DashboardLayout({
               >
                 <item.icon className="w-4 h-4" />
                 <span>{item.name}</span>
+                {item.agentOnly && (
+                  <Badge variant="secondary" className="ml-auto text-[10px] px-1.5 py-0">
+                    Agent
+                  </Badge>
+                )}
               </Link>
             )
           })}
@@ -312,6 +321,16 @@ export default function DashboardLayout({
                   <CurrencyFormatter amount={user.balance} />
                 </div>
               </div>
+
+              {/* Agent Mode Indicator */}
+              {user.isAgent && (
+                <Link href="/dashboard/agent-dashboard">
+                  <Badge className="bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:from-orange-600 hover:to-amber-600 cursor-pointer px-3 py-1">
+                    <Users className="w-3 h-3 mr-1" />
+                    Agent Mode
+                  </Badge>
+                </Link>
+              )}
 
               {/* Notifications */}
               <Button variant="ghost" size="sm" className="relative">

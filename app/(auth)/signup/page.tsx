@@ -115,11 +115,11 @@ export default function SignupPage() {
             throw new Error(otpResult.error || "Failed to send OTP")
           }
 
-          // Set OTP expiration time (5 minutes from now)
-          const expiresAt = Date.now() + 5 * 60 * 1000
+          // Set OTP expiration time (59 seconds from now)
+          const expiresAt = Date.now() + 59 * 1000
           setOtpExpiresAt(expiresAt)
-          setTimeRemaining(5 * 60) // 5 minutes in seconds
-          
+          setTimeRemaining(59) // 59 seconds
+
           // OTP should be sent via SMS - no need to show alert
           setStep(2) // Move to OTP verification
         } catch (otpError) {
@@ -295,10 +295,10 @@ export default function SignupPage() {
                 }
 
                 // Reset expiration timer
-                const expiresAt = Date.now() + 5 * 60 * 1000
+                const expiresAt = Date.now() + 59 * 1000
                 setOtpExpiresAt(expiresAt)
-                setTimeRemaining(5 * 60)
-                
+                setTimeRemaining(59)
+
                 // Show success message
                 setError("") // Clear any errors
                 alert("OTP resent successfully! Please check your SMS.")

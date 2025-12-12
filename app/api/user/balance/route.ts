@@ -43,35 +43,59 @@ export async function GET(request: NextRequest) {
     try {
       const allTransactions = await transactionsCollection.find({
         $or: [
+          { userId: new ObjectId(userId) },
           { fromUserId: new ObjectId(userId) },
           { toUserId: new ObjectId(userId) },
         ],
         status: "completed",
-      }).toArray()
+      })
+      .sort({ createdAt: 1 }) // Sort by creation time to process in order
+      .toArray()
 
       let calculatedBalance = 0
 
       for (const txn of allTransactions) {
+        const txnUserId = txn.userId?.toString()
         const isSender = txn.fromUserId?.toString() === userId
         const isReceiver = txn.toUserId?.toString() === userId
 
-        if (txn.type === "deposit" && isReceiver) {
+        // Deposit - money coming in
+        if (txn.type === "deposit" && (txnUserId === userId || isReceiver)) {
           calculatedBalance += txn.amount
-        } else if (txn.type === "withdrawal" && isSender) {
+        }
+        // M-Pesa/Bank Withdrawal - money going out
+        else if (txn.type === "withdrawal" && (txnUserId === userId || isSender)) {
           calculatedBalance -= txn.amount
-        } else if (txn.type === "send" && isSender) {
+        }
+        // Send - money going out
+        else if (txn.type === "send" && isSender) {
           calculatedBalance -= txn.amount
-        } else if (txn.type === "send" && isReceiver) {
+        }
+        // Receive (internal) - money coming in
+        else if (txn.type === "send" && isReceiver) {
+          calculatedBalance += txn.amount
+        }
+        // Agent withdrawal - customer pays agent for cash (money out for customer)
+        else if (txn.type === "agent_withdrawal" && (txnUserId === userId || isSender)) {
+          calculatedBalance -= txn.amount
+        }
+        // Agent receive - agent gets paid for providing cash (money in for agent)
+        else if (txn.type === "agent_receive" && (txnUserId === userId || isReceiver)) {
           calculatedBalance += txn.amount
         }
       }
 
+      // Always use calculated balance to ensure accuracy
       // If calculated balance differs from stored balance, update it
       if (Math.abs(calculatedBalance - balance) > 0.01) {
+        console.log(`Correcting balance for user ${userId}: ${balance} -> ${calculatedBalance}`)
         await usersCollection.updateOne(
           { _id: new ObjectId(userId) },
           { $set: { balance: calculatedBalance } }
         )
+        balance = calculatedBalance
+      } else {
+        // Even if they match, use calculated to ensure consistency
         balance = calculatedBalance
       }
     } catch (error) {

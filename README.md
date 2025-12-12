@@ -68,6 +68,9 @@ yarn install
    
    # MongoDB Connection (Required for real transactions)
    MONGODB_URI=your_mongodb_connection_string_here
+   
+   # Google Maps API (Required for Uber-like agent tracking)
+   NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=your_google_maps_api_key_here
    \`\`\`
    
    **Your Chambu Digital Credentials (Already Configured):**
@@ -76,6 +79,11 @@ yarn install
    - **Merchant ID**: `MERCHANT_1765522848334_d38132`
    
    **Note**: The API key is automatically used by the application. Client ID and Merchant ID are for reference.
+   
+   **Google Maps Setup:**
+   - See `GOOGLE_MAPS_SETUP.md` for detailed setup instructions
+   - You need to enable: Maps JavaScript API, Geocoding API, Directions API, Distance Matrix API
+   - Google provides $200 free credit per month (usually enough for small apps)
 
 4. Run the development server
 \`\`\`bash

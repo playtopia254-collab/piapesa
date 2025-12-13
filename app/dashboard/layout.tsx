@@ -36,6 +36,7 @@ import { mockApi, type User } from "@/lib/mock-api"
 import { CurrencyFormatter } from "@/components/currency-formatter"
 import { cn } from "@/lib/utils"
 import { onBalanceUpdate } from "@/lib/balance-updater"
+import { NotificationsDropdown } from "@/components/notifications-dropdown"
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: CreditCard },
@@ -43,6 +44,7 @@ const navigation = [
   { name: "Send Money", href: "/dashboard/send", icon: Send },
   { name: "Withdraw", href: "/dashboard/withdraw", icon: Download },
   { name: "Transactions", href: "/dashboard/transactions", icon: FileText },
+  { name: "Notifications", href: "/dashboard/notifications", icon: Bell },
   { name: "Agent Dashboard", href: "/dashboard/agent-dashboard", icon: Users, agentOnly: true },
   { name: "Become Agent", href: "/dashboard/become-agent", icon: UserCheck },
   { name: "Help & Support", href: "/dashboard/support", icon: HelpCircle },
@@ -333,10 +335,7 @@ export default function DashboardLayout({
               )}
 
               {/* Notifications */}
-              <Button variant="ghost" size="sm" className="relative">
-                <Bell className="w-4 h-4" />
-                <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full" />
-              </Button>
+              <NotificationsDropdown />
 
               {/* User menu */}
               <DropdownMenu>
@@ -396,7 +395,23 @@ export default function DashboardLayout({
         </header>
 
         {/* Page content */}
-        <main className="p-4 pb-20 lg:pb-4">{children}</main>
+        <main className="p-4 pb-24 lg:pb-24 min-h-[calc(100vh-4rem)]">{children}</main>
+
+        {/* Footer - Fixed at bottom */}
+        <footer className="fixed bottom-0 left-0 right-0 lg:left-64 border-t border-border bg-card/95 backdrop-blur-sm py-4 px-4 z-[5]">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">
+              © {new Date().getFullYear()} Pia Pesa. All rights reserved.
+            </p>
+            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+              <span>Secure</span>
+              <span>•</span>
+              <span>Fast</span>
+              <span>•</span>
+              <span>Reliable</span>
+            </div>
+          </div>
+        </footer>
       </div>
     </div>
   )

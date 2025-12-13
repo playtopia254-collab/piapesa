@@ -124,3 +124,41 @@
     @apply bg-background text-foreground;
   }
 }
+
+@keyframes moveConnection {
+  0% {
+    transform: translateX(0);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translateX(200px);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(400px);
+    opacity: 0.4;
+  }
+}
+
+@keyframes moveConnectionReverse {
+  0% {
+    transform: translateX(0);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translateX(-200px);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(-400px);
+    opacity: 0.4;
+  }
+}
+
+.animate-move-connection {
+  animation: moveConnection 2.5s ease-in-out infinite;
+}
+
+.animate-move-connection-reverse {
+  animation: moveConnectionReverse 2.5s ease-in-out infinite;
+}

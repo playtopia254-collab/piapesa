@@ -213,6 +213,12 @@ export function AgentMap({
                       </div>
                       <span>•</span>
                       <span>{agent.totalTransactions} trips</span>
+                      {agent.totalReviews !== undefined && agent.totalReviews > 0 && (
+                        <>
+                          <span>•</span>
+                          <span>{agent.totalReviews} {agent.totalReviews === 1 ? "review" : "reviews"}</span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>

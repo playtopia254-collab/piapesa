@@ -170,7 +170,7 @@ export default function BecomeAgentPage() {
               </div>
               <div>
                 <p className="font-medium">Earn Commission</p>
-                <p className="text-sm text-muted-foreground">Get paid for every transaction</p>
+                <p className="text-sm text-muted-foreground">Earn 2% commission on every withdrawal transaction (minimum KES 10)</p>
               </div>
             </div>
             <div className="flex items-center space-x-3">

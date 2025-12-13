@@ -23,9 +23,10 @@ interface GoogleMapsWrapperProps {
   onSelectAgent: (agent: Agent) => void
   showRoute?: boolean // Show route from agent to user
   agentLocation?: { lat: number; lng: number } | null // Real-time agent location for tracking
+  showMeetingPoint?: boolean // Show meeting point (midpoint) between customer and agent
 }
 
-const libraries: ("places" | "geometry" | "drawing" | "visualization")[] = ["places", "geometry"]
+const libraries: ("places" | "geometry" | "drawing" | "visualization")[] = ["places", "geometry", "drawing"]
 
 const mapContainerStyle = {
   width: "100%",
@@ -44,6 +45,7 @@ export function GoogleMapsWrapper({
   onSelectAgent,
   showRoute = false,
   agentLocation = null,
+  showMeetingPoint = false,
 }: GoogleMapsWrapperProps) {
   const [map, setMap] = useState<google.maps.Map | null>(null)
   const [directions, setDirections] = useState<google.maps.DirectionsResult | null>(null)
@@ -93,23 +95,50 @@ export function GoogleMapsWrapper({
     libraries,
   })
 
-  // Calculate map bounds to fit all markers
+  // Calculate map bounds to fit all markers with validation
   const calculateBounds = useCallback(() => {
     if (!userLocation || agents.length === 0) return null
 
     const bounds = new google.maps.LatLngBounds()
-    bounds.extend(new google.maps.LatLng(userLocation.lat, userLocation.lng))
     
+    // Validate and add user location
+    const validUserLoc = userLocation && 
+      typeof userLocation.lat === 'number' && typeof userLocation.lng === 'number' &&
+      !isNaN(userLocation.lat) && !isNaN(userLocation.lng)
+      ? userLocation
+      : null
+
+    if (validUserLoc) {
+      bounds.extend(new google.maps.LatLng(validUserLoc.lat, validUserLoc.lng))
+    }
+    
+    // Validate and add agent locations
     agents.forEach((agent) => {
-      bounds.extend(new google.maps.LatLng(agent.location.lat, agent.location.lng))
+      if (agent.location && 
+          typeof agent.location.lat === 'number' && typeof agent.location.lng === 'number' &&
+          !isNaN(agent.location.lat) && !isNaN(agent.location.lng)) {
+        bounds.extend(new google.maps.LatLng(agent.location.lat, agent.location.lng))
+      }
     })
 
-    if (agentLocation) {
+    // Validate and add real-time agent location
+    if (agentLocation && 
+        typeof agentLocation.lat === 'number' && typeof agentLocation.lng === 'number' &&
+        !isNaN(agentLocation.lat) && !isNaN(agentLocation.lng)) {
       bounds.extend(new google.maps.LatLng(agentLocation.lat, agentLocation.lng))
     }
 
+    // Include meeting point if shown - calculate it here
+    if (showMeetingPoint && validUserLoc && agentLocation) {
+      const meetingPoint = {
+        lat: (validUserLoc.lat + agentLocation.lat) / 2,
+        lng: (validUserLoc.lng + agentLocation.lng) / 2,
+      }
+      bounds.extend(new google.maps.LatLng(meetingPoint.lat, meetingPoint.lng))
+    }
+
     return bounds
-  }, [userLocation, agents, agentLocation])
+  }, [userLocation, agents, agentLocation, showMeetingPoint])
 
   // Calculate agent heading (direction of movement)
   useEffect(() => {
@@ -149,7 +178,7 @@ export function GoogleMapsWrapper({
         })
       }
     }
-  }, [map, isMapReady, userLocation, agents, agentLocation, calculateBounds])
+  }, [map, isMapReady, userLocation, agents, agentLocation, showMeetingPoint, calculateBounds])
 
   // Calculate and display route
   useEffect(() => {
@@ -260,35 +289,183 @@ export function GoogleMapsWrapper({
     )
   }
 
-  const center = userLocation || defaultCenter
+  // Ensure userLocation has valid coordinates
+  const validUserLocation = userLocation && 
+    typeof userLocation.lat === 'number' && 
+    typeof userLocation.lng === 'number' &&
+    !isNaN(userLocation.lat) && 
+    !isNaN(userLocation.lng)
+    ? userLocation
+    : null
 
-  // Icon creation functions - only called when Google Maps is loaded
+  if (!validUserLocation) {
+    return (
+      <Card>
+        <CardContent className="py-12">
+          <div className="text-center text-muted-foreground">
+            Invalid location coordinates
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const center = validUserLocation || defaultCenter
+
+  // Icon creation functions - Awesome designed markers with accurate positioning
   const createUserMarkerIcon = (): google.maps.Icon | undefined => {
     if (!isMapReady || typeof window === "undefined" || !window.google) return undefined
     return {
       url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
-        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
-          <circle cx="20" cy="20" r="18" fill="#3b82f6" stroke="white" stroke-width="3"/>
-          <circle cx="20" cy="20" r="8" fill="white"/>
+        <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">
+          <defs>
+            <filter id="userShadow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+              <feOffset dx="0" dy="3" result="offsetblur"/>
+              <feComponentTransfer>
+                <feFuncA type="linear" slope="0.5"/>
+              </feComponentTransfer>
+              <feMerge>
+                <feMergeNode/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+            <linearGradient id="userGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+              <stop offset="100%" style="stop-color:#2563eb;stop-opacity:1" />
+            </linearGradient>
+            <radialGradient id="userGlow" cx="50%" cy="50%">
+              <stop offset="0%" style="stop-color:#60a5fa;stop-opacity:0.6" />
+              <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0" />
+            </radialGradient>
+          </defs>
+          <g filter="url(#userShadow)">
+            <!-- Outer glow ring -->
+            <circle cx="40" cy="40" r="36" fill="url(#userGlow)"/>
+            <!-- Main circle background -->
+            <circle cx="40" cy="40" r="32" fill="url(#userGradient)" stroke="#ffffff" stroke-width="4"/>
+            <!-- Person/Avatar Icon -->
+            <g transform="translate(40, 40)">
+              <!-- Head -->
+              <circle cx="0" cy="-8" r="10" fill="#ffffff" stroke="#3b82f6" stroke-width="2"/>
+              <!-- Body (shoulders and torso) -->
+              <path d="M -14 4 Q -14 0, -10 0 L 10 0 Q 14 0, 14 4 L 14 20 Q 14 24, 10 24 L -10 24 Q -14 24, -14 20 Z" 
+                    fill="#ffffff" stroke="#3b82f6" stroke-width="2"/>
+              <!-- Face details -->
+              <circle cx="-4" cy="-10" r="1.5" fill="#3b82f6"/>
+              <circle cx="4" cy="-10" r="1.5" fill="#3b82f6"/>
+              <path d="M -4 -6 Q 0 -4, 4 -6" stroke="#3b82f6" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+            </g>
+            <!-- Pulse ring animation -->
+            <circle cx="40" cy="40" r="30" fill="none" stroke="#3b82f6" stroke-width="2" opacity="0.5"/>
+          </g>
         </svg>
       `),
-      scaledSize: new google.maps.Size(40, 40),
-      anchor: new google.maps.Point(20, 20),
+      scaledSize: new google.maps.Size(80, 80),
+      anchor: new google.maps.Point(40, 40), // Center anchor for accurate positioning
     }
   }
 
   const createAgentMarkerIcon = (isSelected: boolean): google.maps.Icon | undefined => {
     if (!isMapReady || typeof window === "undefined" || !window.google) return undefined
+    const color = isSelected ? "#22c55e" : "#f97316"
+    const shadowColor = isSelected ? "#16a34a" : "#ea580c"
     return {
       url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
-        <svg xmlns="http://www.w3.org/2000/svg" width="50" height="50" viewBox="0 0 50 50">
-          <circle cx="25" cy="25" r="22" fill="${isSelected ? "#22c55e" : "#f97316"}" stroke="white" stroke-width="3"/>
-          <path d="M25 10 C18 10, 12 16, 12 23 C12 30, 25 40, 25 40 C25 40, 38 30, 38 23 C38 16, 32 10, 25 10 Z" fill="white" opacity="0.9"/>
-          <circle cx="25" cy="23" r="6" fill="${isSelected ? "#22c55e" : "#f97316"}"/>
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <defs>
+            <filter id="agentShadow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+              <feOffset dx="0" dy="3" result="offsetblur"/>
+              <feComponentTransfer>
+                <feFuncA type="linear" slope="0.4"/>
+              </feComponentTransfer>
+              <feMerge>
+                <feMergeNode/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+            <linearGradient id="agentGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" style="stop-color:${color};stop-opacity:1" />
+              <stop offset="100%" style="stop-color:${shadowColor};stop-opacity:1" />
+            </linearGradient>
+          </defs>
+          <g filter="url(#agentShadow)">
+            <!-- Location pin shape -->
+            <path d="M32 8 C24 8, 18 14, 18 22 C18 30, 32 56, 32 56 C32 56, 46 30, 46 22 C46 14, 40 8, 32 8 Z" 
+                  fill="url(#agentGradient)" 
+                  stroke="#ffffff" 
+                  stroke-width="3"/>
+            <!-- Inner highlight -->
+            <ellipse cx="32" cy="22" rx="12" ry="12" fill="#ffffff" opacity="0.3"/>
+            <!-- Icon/Letter -->
+            <circle cx="32" cy="22" r="8" fill="#ffffff"/>
+            <text x="32" y="26" font-family="Arial, sans-serif" font-size="14" font-weight="bold" 
+                  fill="${color}" text-anchor="middle">A</text>
+            <!-- Glow effect -->
+            <circle cx="32" cy="22" r="14" fill="none" stroke="${color}" stroke-width="2" opacity="0.3"/>
+          </g>
         </svg>
       `),
-      scaledSize: new google.maps.Size(50, 50),
-      anchor: new google.maps.Point(25, 50),
+      scaledSize: new google.maps.Size(64, 64),
+      anchor: new google.maps.Point(32, 56), // Bottom center of pin for accurate positioning
+    }
+  }
+
+  // Calculate meeting point (midpoint) between customer and agent
+  const calculateMeetingPoint = (): { lat: number; lng: number } | null => {
+    if (!validUserLocation || !agentLocation) return null
+    
+    return {
+      lat: (validUserLocation.lat + agentLocation.lat) / 2,
+      lng: (validUserLocation.lng + agentLocation.lng) / 2,
+    }
+  }
+
+  const meetingPoint = showMeetingPoint ? calculateMeetingPoint() : null
+
+  const createMeetingPointIcon = (): google.maps.Icon | undefined => {
+    if (!isMapReady || typeof window === "undefined" || !window.google) return undefined
+    return {
+      url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
+        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+          <defs>
+            <filter id="meetingShadow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+              <feOffset dx="0" dy="3" result="offsetblur"/>
+              <feComponentTransfer>
+                <feFuncA type="linear" slope="0.4"/>
+              </feComponentTransfer>
+              <feMerge>
+                <feMergeNode/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+            <linearGradient id="meetingGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" style="stop-color:#9333ea;stop-opacity:1" />
+              <stop offset="100%" style="stop-color:#7c3aed;stop-opacity:1" />
+            </linearGradient>
+          </defs>
+          <g filter="url(#meetingShadow)">
+            <!-- Location pin shape -->
+            <path d="M32 8 C24 8, 18 14, 18 22 C18 30, 32 56, 32 56 C32 56, 46 30, 46 22 C46 14, 40 8, 32 8 Z" 
+                  fill="url(#meetingGradient)" 
+                  stroke="#ffffff" 
+                  stroke-width="3"/>
+            <!-- Inner highlight -->
+            <ellipse cx="32" cy="22" rx="12" ry="12" fill="#ffffff" opacity="0.3"/>
+            <!-- Handshake icon -->
+            <circle cx="32" cy="22" r="10" fill="#ffffff"/>
+            <path d="M24 22 L28 18 L32 22 L36 18 L40 22" stroke="#9333ea" stroke-width="2" fill="none" stroke-linecap="round"/>
+            <circle cx="28" cy="20" r="2" fill="#9333ea"/>
+            <circle cx="36" cy="20" r="2" fill="#9333ea"/>
+            <!-- Glow effect -->
+            <circle cx="32" cy="22" r="14" fill="none" stroke="#9333ea" stroke-width="2" opacity="0.3"/>
+          </g>
+        </svg>
+      `),
+      scaledSize: new google.maps.Size(64, 64),
+      anchor: new google.maps.Point(32, 56), // Bottom center of pin
     }
   }
 
@@ -297,21 +474,50 @@ export function GoogleMapsWrapper({
     const rotation = heading || 0
     return {
       url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
-        <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" viewBox="0 0 60 60">
-          <g transform="rotate(${rotation} 30 30)">
-            <rect x="10" y="20" width="40" height="20" rx="3" fill="#1a1a1a" stroke="white" stroke-width="2"/>
-            <rect x="15" y="25" width="10" height="10" rx="1" fill="#3b82f6" opacity="0.8"/>
-            <rect x="35" y="25" width="10" height="10" rx="1" fill="#3b82f6" opacity="0.8"/>
-            <circle cx="20" cy="45" r="5" fill="#333" stroke="white" stroke-width="1"/>
-            <circle cx="20" cy="45" r="2" fill="#fff"/>
-            <circle cx="40" cy="45" r="5" fill="#333" stroke="white" stroke-width="1"/>
-            <circle cx="40" cy="45" r="2" fill="#fff"/>
-            <rect x="12" y="15" width="36" height="8" rx="2" fill="#1a1a1a"/>
+        <svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72">
+          <defs>
+            <filter id="carShadow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+              <feOffset dx="0" dy="4" result="offsetblur"/>
+              <feComponentTransfer>
+                <feFuncA type="linear" slope="0.5"/>
+              </feComponentTransfer>
+              <feMerge>
+                <feMergeNode/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+            <linearGradient id="carGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" style="stop-color:#1e40af;stop-opacity:1" />
+              <stop offset="100%" style="stop-color:#1e3a8a;stop-opacity:1" />
+            </linearGradient>
+          </defs>
+          <g filter="url(#carShadow)" transform="rotate(${rotation} 36 36)">
+            <!-- Car body with modern design -->
+            <rect x="14" y="24" width="44" height="24" rx="4" fill="url(#carGradient)" stroke="#ffffff" stroke-width="2.5"/>
+            <!-- Windshield -->
+            <rect x="18" y="28" width="14" height="16" rx="2" fill="#3b82f6" opacity="0.6"/>
+            <!-- Rear window -->
+            <rect x="32" y="28" width="14" height="16" rx="2" fill="#3b82f6" opacity="0.6"/>
+            <!-- Roof -->
+            <rect x="16" y="18" width="40" height="10" rx="3" fill="#1e3a8a"/>
+            <!-- Wheels with detail -->
+            <circle cx="24" cy="52" r="6" fill="#1a1a1a" stroke="#ffffff" stroke-width="2"/>
+            <circle cx="24" cy="52" r="3" fill="#4a4a4a"/>
+            <circle cx="24" cy="52" r="1.5" fill="#ffffff"/>
+            <circle cx="48" cy="52" r="6" fill="#1a1a1a" stroke="#ffffff" stroke-width="2"/>
+            <circle cx="48" cy="52" r="3" fill="#4a4a4a"/>
+            <circle cx="48" cy="52" r="1.5" fill="#ffffff"/>
+            <!-- Headlights -->
+            <circle cx="20" cy="32" r="2" fill="#ffff99"/>
+            <circle cx="20" cy="40" r="2" fill="#ff4444"/>
+            <!-- Side detail line -->
+            <line x1="18" y1="36" x2="54" y2="36" stroke="#ffffff" stroke-width="1.5" opacity="0.5"/>
           </g>
         </svg>
       `),
-      scaledSize: new google.maps.Size(60, 60),
-      anchor: new google.maps.Point(30, 30),
+      scaledSize: new google.maps.Size(72, 72),
+      anchor: new google.maps.Point(36, 36), // Center anchor for accurate positioning
     }
   }
 
@@ -338,36 +544,51 @@ export function GoogleMapsWrapper({
           ],
         }}
       >
-        {/* User location marker */}
-        {isMapReady && createUserMarkerIcon() && (
+        {/* User location marker with accurate positioning */}
+        {isMapReady && createUserMarkerIcon() && validUserLocation && (
           <Marker
-            position={userLocation}
+            position={{
+              lat: validUserLocation.lat,
+              lng: validUserLocation.lng,
+            }}
             icon={createUserMarkerIcon()}
             title="Your Location"
             animation={google.maps.Animation.DROP}
+            zIndex={1000}
+            optimized={false}
           />
         )}
 
-        {/* User location circle */}
-        <Circle
-          center={userLocation}
-          radius={100}
-          options={{
-            fillColor: "#3b82f6",
-            fillOpacity: 0.1,
-            strokeColor: "#3b82f6",
-            strokeOpacity: 0.5,
-            strokeWeight: 2,
-          }}
-        />
+        {/* User location circle with better visibility */}
+        {validUserLocation && (
+          <Circle
+            center={validUserLocation}
+            radius={150}
+            options={{
+              fillColor: "#3b82f6",
+              fillOpacity: 0.08,
+              strokeColor: "#3b82f6",
+              strokeOpacity: 0.6,
+              strokeWeight: 2,
+              zIndex: 1,
+            }}
+          />
+        )}
 
-        {/* Agent markers */}
+        {/* Agent markers with accurate positioning */}
         {isMapReady && agents.map((agent) => {
           // Use real-time agent location if available and this is the selected agent
           const agentPos =
             agentLocation && selectedAgent?.id === agent.id
               ? agentLocation
               : agent.location
+
+          // Ensure coordinates are valid
+          if (!agentPos || typeof agentPos.lat !== 'number' || typeof agentPos.lng !== 'number' || 
+              isNaN(agentPos.lat) || isNaN(agentPos.lng)) {
+            console.warn(`Invalid coordinates for agent ${agent.id}:`, agentPos)
+            return null
+          }
 
           const icon = agentLocation && selectedAgent?.id === agent.id
             ? createCarIcon(agentHeading)
@@ -378,18 +599,33 @@ export function GoogleMapsWrapper({
           return (
             <Marker
               key={agent.id}
-              position={agentPos}
+              position={{
+                lat: agentPos.lat,
+                lng: agentPos.lng,
+              }}
               icon={icon}
-              title={agent.name}
+              title={`${agent.name} - ${agent.distanceFormatted} away`}
               animation={
                 agentLocation && selectedAgent?.id === agent.id
                   ? undefined
                   : google.maps.Animation.DROP
               }
               onClick={() => onSelectAgent(agent)}
+              zIndex={selectedAgent?.id === agent.id ? 1001 : 500}
             />
           )
         })}
+
+        {/* Meeting Point Marker */}
+        {showMeetingPoint && meetingPoint && isMapReady && createMeetingPointIcon() && (
+          <Marker
+            position={meetingPoint}
+            icon={createMeetingPointIcon()}
+            title="Meeting Point (Midpoint)"
+            animation={google.maps.Animation.DROP}
+            zIndex={999}
+          />
+        )}
 
         {/* Route from agent to user */}
         {showRoute && directions && (
@@ -423,6 +659,12 @@ export function GoogleMapsWrapper({
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-green-500 h-1"></div>
             <span>Route to {selectedAgent.name}</span>
+          </div>
+        )}
+        {showMeetingPoint && meetingPoint && (
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+            <span>Meeting Point</span>
           </div>
         )}
       </div>

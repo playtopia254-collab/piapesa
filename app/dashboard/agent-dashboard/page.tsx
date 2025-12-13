@@ -28,10 +28,10 @@ import { getCurrentLocation } from "@/lib/location-utils"
 import { dispatchBalanceUpdate } from "@/lib/balance-updater"
 
 // Dynamic import for map to avoid SSR issues
-const CustomerLocationMap = dynamic(() => import("@/components/customer-location-map"), {
+const GoogleMapsWrapper = dynamic(() => import("@/components/google-maps-wrapper").then(mod => ({ default: mod.GoogleMapsWrapper })), {
   ssr: false,
   loading: () => (
-    <div className="h-48 bg-gray-100 rounded-lg flex items-center justify-center">
+    <div className="h-96 bg-gray-100 rounded-lg flex items-center justify-center">
       <div className="text-gray-500">Loading map...</div>
     </div>
   ),
@@ -87,9 +87,11 @@ export default function AgentDashboardPage() {
     activeRequests: 0,
     pendingRequests: 0,
     todayEarnings: 0,
+    todayCommission: 0,
     todayTransactionCount: 0,
     totalCompleted: 0,
     totalEarnings: 0,
+    totalCommission: 0,
   })
 
   // Load user from session
@@ -220,12 +222,15 @@ export default function AgentDashboardPage() {
     
     if (agentLocation) {
       // If we have agent's location, provide directions
-      url = `https://www.google.com/maps/dir/?api=1&origin=${agentLocation.lat},${agentLocation.lng}&destination=${destLat},${destLng}&travelmode=driving`
+      // Using Google Maps URL that works on both web and mobile (opens app if available)
+      url = `https://www.google.com/maps/dir/?api=1&origin=${agentLocation.lat},${agentLocation.lng}&destination=${destLat},${destLng}&travelmode=driving&dir_action=navigate`
     } else {
       // Otherwise just show the destination
       url = `https://www.google.com/maps/search/?api=1&query=${destLat},${destLng}`
     }
     
+    // On mobile, this will open the Google Maps app if installed, otherwise opens in browser
+    // On desktop, opens in a new tab
     window.open(url, "_blank")
   }
 
@@ -301,6 +306,10 @@ export default function AgentDashboardPage() {
     setSuccessMessage("")
 
     try {
+      // Find the request to get coordinates for auto-navigation
+      const request = pendingRequests.find(r => r._id === requestId)
+      const requestCoordinates = request?.coordinates
+
       const response = await fetch(`/api/agent-withdrawals/${requestId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -316,9 +325,23 @@ export default function AgentDashboardPage() {
         throw new Error(data.error || "Failed to accept request")
       }
 
+      // Automatically open Google Maps navigation after accepting
+      if (requestCoordinates) {
+        // Small delay to ensure the request is processed
+        setTimeout(() => {
+          openGoogleMaps(
+            requestCoordinates.lat,
+            requestCoordinates.lng,
+            request?.user?.name || "Customer"
+          )
+        }, 500)
+      }
+
       // Refresh requests and stats
       await fetchRequests()
       await fetchStats()
+      
+      setSuccessMessage("Request accepted! Opening navigation...")
     } catch (error) {
       setError(error instanceof Error ? error.message : "Failed to accept request")
     } finally {
@@ -412,13 +435,15 @@ export default function AgentDashboardPage() {
 
       // Get the withdrawal amount from the request
       const withdrawalAmount = data.request?.amount || 0
-      const previousBalance = (data.agentBalance || 0) - withdrawalAmount
+      const commission = data.commission || Math.max(withdrawalAmount * 0.02, 10) // 2% commission, min KES 10
+      const totalReceived = withdrawalAmount + commission
+      const previousBalance = (data.agentBalance || 0) - totalReceived
       const newBalance = data.agentBalance || 0
       const customerName = data.request?.user?.name || "Customer"
 
-      // Show success message with transaction details
+      // Show success message with transaction details including commission
       setSuccessMessage(
-        `💰 Money Received! KES ${withdrawalAmount.toFixed(2)} from ${customerName} has been credited to your account. Balance: KES ${previousBalance.toFixed(2)} → KES ${newBalance.toFixed(2)}`
+        `💰 Transaction Complete! Received KES ${withdrawalAmount.toFixed(2)} + KES ${commission.toFixed(2)} commission from ${customerName}. Balance: KES ${previousBalance.toFixed(2)} → KES ${newBalance.toFixed(2)}`
       )
 
       // Dispatch balance update to refresh the UI
@@ -526,12 +551,14 @@ export default function AgentDashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 px-4 sm:px-0 pb-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Agent Dashboard</h1>
-          <p className="text-muted-foreground">Manage your agent activities</p>
+      <div className="flex items-center justify-between mb-2 gap-3">
+        <div className="space-y-1 flex-1 min-w-0">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+            Agent Dashboard
+          </h1>
+          <p className="text-sm sm:text-base text-muted-foreground">Manage your agent activities and earnings</p>
         </div>
         <Button
           variant="outline"
@@ -541,121 +568,183 @@ export default function AgentDashboardPage() {
             fetchStats()
           }}
           disabled={isRefreshing}
+          className="h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0"
         >
           <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
         </Button>
       </div>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Clock className="h-5 w-5 text-orange-500" />
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+        <Card className="border-l-4 border-l-orange-500 hover:shadow-lg transition-shadow">
+          <CardHeader className="pb-3 px-4 sm:px-6">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground uppercase tracking-wide">
               Active Requests
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.activeRequests}</div>
-            <p className="text-sm text-muted-foreground mt-1">Pending withdrawal requests</p>
+          <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
+            <div className="flex items-baseline justify-between">
+              <div className="text-3xl sm:text-4xl font-bold">{stats.activeRequests}</div>
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-orange-100 dark:bg-orange-900/30 rounded-lg flex items-center justify-center">
+                <Clock className="h-5 w-5 sm:h-6 sm:w-6 text-orange-500" />
+              </div>
+            </div>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-2">Pending withdrawal requests</p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <DollarSign className="h-5 w-5 text-green-500" />
-              Today's Earnings
+        
+        <Card className="border-l-4 border-l-green-500 hover:shadow-lg transition-shadow">
+          <CardHeader className="pb-3 px-4 sm:px-6">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground uppercase tracking-wide">
+              Today's Commission
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-green-600">
-              <CurrencyFormatter amount={stats.todayEarnings} />
+          <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
+            <div className="flex items-baseline justify-between">
+              <div className="text-3xl sm:text-4xl font-bold text-green-600">
+                <CurrencyFormatter amount={stats.todayCommission || 0} />
+              </div>
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
+                <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-500" />
+              </div>
             </div>
-            <p className="text-sm text-muted-foreground mt-1">
-              Commission from {stats.todayTransactionCount} {stats.todayTransactionCount === 1 ? "transaction" : "transactions"}
+            <p className="text-xs sm:text-sm text-muted-foreground mt-2">
+              From {stats.todayTransactionCount} {stats.todayTransactionCount === 1 ? "transaction" : "transactions"}
             </p>
+            {stats.todayEarnings > 0 && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Total received: <CurrencyFormatter amount={stats.todayEarnings} />
+              </p>
+            )}
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <User className="h-5 w-5 text-blue-500" />
+        
+        <Card className="border-l-4 border-l-blue-500 hover:shadow-lg transition-shadow sm:col-span-2 lg:col-span-1">
+          <CardHeader className="pb-3 px-4 sm:px-6">
+            <CardTitle className="text-xs sm:text-sm font-medium text-muted-foreground uppercase tracking-wide">
               Total Completed
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.totalCompleted}</div>
-            <p className="text-sm text-muted-foreground mt-1">
-              All-time transactions
-            </p>
+          <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
+            <div className="flex items-baseline justify-between">
+              <div className="text-3xl sm:text-4xl font-bold">{stats.totalCompleted}</div>
+              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                <User className="h-5 w-5 sm:h-6 sm:w-6 text-blue-500" />
+              </div>
+            </div>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-2">All-time transactions</p>
           </CardContent>
         </Card>
       </div>
 
       {error && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="text-xs sm:text-sm">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription className="text-xs sm:text-sm">{error}</AlertDescription>
         </Alert>
       )}
 
       {successMessage && (
-        <Alert className="border-green-500 bg-green-50 dark:bg-green-950 animate-in slide-in-from-top-2">
-          <CheckCircle className="h-5 w-5 text-green-600 animate-pulse" />
-          <AlertDescription className="text-green-800 dark:text-green-200 font-semibold text-base">
+        <Alert className="border-green-500 bg-green-50 dark:bg-green-950 animate-in slide-in-from-top-2 text-xs sm:text-sm">
+          <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 animate-pulse" />
+          <AlertDescription className="text-green-800 dark:text-green-200 font-semibold text-sm sm:text-base">
             {successMessage}
           </AlertDescription>
         </Alert>
       )}
 
-      {/* Availability Toggle */}
-      <Card className={isAvailable ? "border-green-500 bg-green-50 dark:bg-green-950" : "border-2 border-dashed border-orange-300"}>
-        <CardContent className="pt-6">
-          <div className="flex flex-col space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div
-                  className={`w-4 h-4 rounded-full ${
-                    isAvailable ? "bg-green-500 animate-pulse" : "bg-gray-400"
-                  }`}
-                />
-                <div>
-                  <Label className="text-lg font-semibold">
-                    {isAvailable ? "You're Online" : "You're Offline"}
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    {isAvailable
-                      ? "Receiving withdrawal requests from nearby customers"
-                      : "Click the button below to start receiving requests"}
-                  </p>
-                </div>
+      {/* Availability Toggle - Fully Redesigned */}
+      <Card className={`relative overflow-hidden transition-all duration-300 ${
+        isAvailable 
+          ? "border-green-500/40 bg-gradient-to-br from-green-50 via-emerald-50 to-green-50 dark:from-green-950/50 dark:via-emerald-950/30 dark:to-green-950/50 shadow-lg shadow-green-500/5" 
+          : "border-2 border-dashed border-orange-300/70 bg-gradient-to-br from-orange-50/70 via-amber-50/70 to-orange-50/70 dark:from-orange-950/40 dark:via-amber-950/30 dark:to-orange-950/40"
+      }`}>
+        <CardContent className="p-4 sm:p-6">
+          {/* Top Section: Status and Toggle */}
+          <div className="flex items-start justify-between gap-3 sm:gap-4 mb-4 sm:mb-5">
+            {/* Left: Status Info */}
+            <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">
+              {/* Status Dot Indicator */}
+              <div className="relative flex-shrink-0 mt-1">
+                {isAvailable ? (
+                  <>
+                    <div className="absolute inset-0 rounded-full bg-green-500/40 animate-ping" />
+                    <div className="relative w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-green-500 shadow-lg shadow-green-500/50 ring-2 ring-green-500/20" />
+                  </>
+                ) : (
+                  <div className="w-3 h-3 sm:w-3.5 sm:h-3.5 rounded-full bg-gray-400 dark:bg-gray-500 ring-2 ring-gray-300/20 dark:ring-gray-600/20" />
+                )}
               </div>
+              
+              {/* Status Text */}
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 mb-1 sm:mb-1.5">
+                  <h3 className={`text-lg sm:text-xl font-bold ${
+                    isAvailable ? "text-green-700 dark:text-green-400" : "text-gray-800 dark:text-gray-200"
+                  }`}>
+                    {isAvailable ? "You're Online" : "You're Offline"}
+                  </h3>
+                  <Badge 
+                    variant={isAvailable ? "default" : "secondary"}
+                    className={`text-xs font-semibold px-2 sm:px-2.5 py-0.5 ${
+                      isAvailable 
+                        ? "bg-green-500 hover:bg-green-600" 
+                        : "bg-purple-500 hover:bg-purple-600 text-white"
+                    }`}
+                  >
+                    {isAvailable ? "Active" : "Inactive"}
+                  </Badge>
+                </div>
+                <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed">
+                  {isAvailable
+                    ? "You're actively receiving withdrawal requests from nearby customers"
+                    : "Turn on availability to start receiving withdrawal requests from customers"}
+                </p>
+              </div>
+            </div>
+
+            {/* Right: Toggle Switch */}
+            <div className="flex items-center gap-2 sm:gap-2.5 flex-shrink-0 pt-1">
+              <Label 
+                htmlFor="availability-toggle" 
+                className={`text-xs sm:text-sm font-medium cursor-pointer ${
+                  isAvailable ? "text-green-700 dark:text-green-400" : "text-gray-600 dark:text-gray-400"
+                }`}
+              >
+                {isAvailable ? "Online" : "Offline"}
+              </Label>
               <Switch
+                id="availability-toggle"
                 checked={isAvailable}
                 onCheckedChange={toggleAvailability}
-                className="scale-150"
+                className="data-[state=checked]:bg-green-500"
               />
             </div>
-            
-            {/* Big Go Online/Offline Button */}
+          </div>
+
+          {/* Bottom Section: Action Button */}
+          <div className="pt-3 sm:pt-4 border-t border-border/50">
             <Button
               onClick={toggleAvailability}
-              className={`w-full h-14 text-lg font-bold ${
+              className={`w-full h-11 sm:h-12 font-semibold text-sm sm:text-base transition-all duration-300 ${
                 isAvailable 
-                  ? "bg-red-500 hover:bg-red-600" 
-                  : "bg-green-500 hover:bg-green-600"
+                  ? "bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-md shadow-red-500/20 hover:shadow-lg hover:shadow-red-500/30" 
+                  : "bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white shadow-md shadow-green-500/20 hover:shadow-lg hover:shadow-green-500/30"
               }`}
               size="lg"
             >
               {isAvailable ? (
                 <>
-                  <XCircle className="h-6 w-6 mr-2" />
-                  Go Offline
+                  <XCircle className="h-4 w-4 mr-2" />
+                  <span className="hidden sm:inline">Go Offline - Stop Accepting Requests</span>
+                  <span className="sm:hidden">Go Offline</span>
                 </>
               ) : (
                 <>
-                  <CheckCircle className="h-6 w-6 mr-2" />
-                  Go Online - Start Accepting Requests
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  <span className="hidden sm:inline">Go Online - Start Accepting Requests</span>
+                  <span className="sm:hidden">Go Online</span>
                 </>
               )}
             </Button>
@@ -665,99 +754,99 @@ export default function AgentDashboardPage() {
 
       {/* Active Requests (My Requests) */}
       {myRequests.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-orange-500" />
-              Active Requests ({myRequests.length})
+        <div className="-mx-4 sm:-mx-6 lg:mx-0">
+          <Card className="border-l-4 border-l-orange-500 rounded-none sm:rounded-lg">
+            <CardHeader className="bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/30 dark:to-amber-950/30 px-4 sm:px-6">
+              <CardTitle className="flex items-center gap-2 sm:gap-3">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-100 dark:bg-orange-900/50 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600 dark:text-orange-400" />
+              </div>
+                <div className="min-w-0">
+                  <div className="text-lg sm:text-xl font-bold">Active Requests</div>
+                  <CardDescription className="mt-0.5 text-xs sm:text-sm">{myRequests.length} request{myRequests.length !== 1 ? "s" : ""} in progress</CardDescription>
+              </div>
             </CardTitle>
-            <CardDescription>Requests you've accepted</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pt-4 sm:pt-6 px-0 sm:px-6 pb-0 sm:pb-6">
             {myRequests.map((request) => (
               <div
                 key={request._id}
-                className="border-2 border-orange-400 rounded-lg p-4 space-y-4 bg-orange-50 dark:bg-orange-950"
+                  className="border-2 border-orange-200 dark:border-orange-800 rounded-none sm:rounded-xl bg-gradient-to-br from-orange-50/50 to-amber-50/50 dark:from-orange-950/30 dark:to-amber-950/20 hover:shadow-md transition-all overflow-hidden"
               >
+                  {/* Side-by-side layout for larger screens */}
+                  <div className="flex flex-col lg:flex-row gap-0 lg:gap-4">
+                    {/* Left Side: Customer Info & Actions */}
+                    <div className="flex-1 p-4 sm:p-5 space-y-4 min-w-0">
                 {/* Customer Info Header */}
-                <div className="flex items-start justify-between">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <User className="h-4 w-4" />
-                      <span className="font-medium text-lg">{request.user?.name || "Customer"}</span>
+                    <div className="space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
+                            <User className="h-4 w-4 flex-shrink-0 text-orange-600" />
+                            <span className="font-semibold text-lg sm:text-xl truncate">{request.user?.name || "Customer"}</span>
                       {getStatusBadge(request.status)}
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <MapPin className="h-3 w-3" />
-                      {request.location}
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1.5">
+                            <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
+                            <span className="font-mono text-xs break-all">{request.coordinates ? `${request.coordinates.lat.toFixed(4)}, ${request.coordinates.lng.toFixed(4)}` : request.location}</span>
+                          </div>
                       {request.coordinates && agentLocation && (
-                        <Badge variant="outline" className="ml-2 text-blue-600 border-blue-400">
-                          📍 {getDistanceToClient(request.coordinates)} away
-                        </Badge>
+                            <div className="flex items-center gap-1.5 text-sm font-semibold text-blue-600 dark:text-blue-400">
+                              <Navigation className="h-4 w-4 flex-shrink-0" />
+                              <span>{getDistanceToClient(request.coordinates)} away</span>
+                            </div>
                       )}
                     </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-bold text-green-600">
+                        <div className="text-right flex-shrink-0">
+                          <div className="text-2xl sm:text-3xl font-bold text-green-600">
                       <CurrencyFormatter amount={request.amount} />
                     </div>
                   </div>
                 </div>
-
-                {/* Map showing customer location */}
-                {request.coordinates && (
-                  <div className="rounded-lg overflow-hidden border-2 border-gray-200">
-                    <CustomerLocationMap
-                      customerLocation={request.coordinates}
-                      agentLocation={agentLocation}
-                      height="200px"
-                    />
-                    <div className="bg-gray-100 dark:bg-gray-800 p-2 text-center text-sm flex items-center justify-center gap-4">
-                      <span>🚗 You</span>
-                      <span>📍 Customer</span>
-                      <span className="text-purple-600">--- Route</span>
                     </div>
-                  </div>
-                )}
 
-                {/* Contact & Navigation Buttons */}
+                    {/* Contact & Navigation Buttons - Fixed at bottom for easy access */}
+                    <div className="sticky bottom-0 bg-gradient-to-br from-orange-50/50 to-amber-50/50 dark:from-orange-950/30 dark:to-amber-950/20 -mx-4 sm:-mx-5 px-4 sm:px-5 py-3 border-t border-orange-200 dark:border-orange-800 z-10">
                 <div className="grid grid-cols-2 gap-2">
                   <a href={`tel:${request.user?.phone}`} className="block">
-                    <Button variant="outline" className="w-full">
-                      <Phone className="h-4 w-4 mr-2" />
-                      Call {request.user?.name?.split(' ')[0] || 'Customer'}
+                          <Button variant="outline" className="w-full text-sm sm:text-base h-11 sm:h-12 bg-white dark:bg-gray-800 hover:bg-green-50 dark:hover:bg-green-950 border-green-300 dark:border-green-700">
+                            <Phone className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
+                            <span className="truncate font-semibold">Call</span>
                     </Button>
                   </a>
                   {request.coordinates && (
                     <Button
                       variant="outline"
-                      className="bg-blue-50 hover:bg-blue-100 border-blue-300 text-blue-700"
+                            className="bg-blue-500 hover:bg-blue-600 text-white border-blue-500 text-sm sm:text-base w-full h-11 sm:h-12 font-semibold"
                       onClick={() => openGoogleMaps(request.coordinates!.lat, request.coordinates!.lng, request.user?.name || "Customer")}
                     >
-                      <Navigation className="h-4 w-4 mr-2" />
-                      Navigate in Maps
+                            <Navigation className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
+                            <span className="truncate">Navigate</span>
                     </Button>
                   )}
+                      </div>
                 </div>
 
                 {request.notes && (
-                  <p className="text-sm bg-white dark:bg-gray-800 p-2 rounded border">
-                    📝 Note: {request.notes}
+                      <div className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-orange-200 dark:border-orange-800">
+                        <p className="text-sm text-muted-foreground">
+                          <span className="font-semibold">📝 Note:</span> {request.notes}
                   </p>
+                      </div>
                 )}
 
                 {/* Confirmation Status */}
                 {request.status === "in_progress" && (
                   <div className="bg-blue-50 dark:bg-blue-950 p-3 rounded-lg border border-blue-200">
-                    <p className="text-sm font-semibold mb-2 text-blue-900 dark:text-blue-100">
+                        <p className="text-xs sm:text-sm font-semibold mb-2 text-blue-900 dark:text-blue-100">
                       Confirmation Status:
                     </p>
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm">Agent Confirmed:</span>
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0">
+                            <span className="text-xs sm:text-sm">Agent Confirmed:</span>
                         <Badge
                           variant={request.agentConfirmed ? "default" : "secondary"}
-                          className={request.agentConfirmed ? "bg-green-500" : ""}
+                              className={`text-xs ${request.agentConfirmed ? "bg-green-500" : ""}`}
                         >
                           {request.agentConfirmed ? (
                             <CheckCircle className="h-3 w-3 mr-1" />
@@ -767,11 +856,11 @@ export default function AgentDashboardPage() {
                           {request.agentConfirmed ? "Confirmed" : "Pending"}
                         </Badge>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm">Customer Confirmed:</span>
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0">
+                            <span className="text-xs sm:text-sm">Customer Confirmed:</span>
                         <Badge
                           variant={request.userConfirmed ? "default" : "secondary"}
-                          className={request.userConfirmed ? "bg-green-500" : ""}
+                              className={`text-xs ${request.userConfirmed ? "bg-green-500" : ""}`}
                         >
                           {request.userConfirmed ? (
                             <CheckCircle className="h-3 w-3 mr-1" />
@@ -782,9 +871,9 @@ export default function AgentDashboardPage() {
                         </Badge>
                       </div>
                       {request.agentConfirmed && request.userConfirmed && (
-                        <Alert className="mt-2 border-green-500 bg-green-50 dark:bg-green-950">
+                            <Alert className="mt-2 border-green-500 bg-green-50 dark:bg-green-950 text-xs sm:text-sm">
                           <CheckCircle className="h-4 w-4 text-green-600" />
-                          <AlertDescription className="text-green-800 dark:text-green-200">
+                              <AlertDescription className="text-green-800 dark:text-green-200 text-xs sm:text-sm">
                             Both parties confirmed! Transaction will complete automatically.
                           </AlertDescription>
                         </Alert>
@@ -794,29 +883,31 @@ export default function AgentDashboardPage() {
                 )}
 
                 {/* Action Buttons based on status */}
-                <div className="flex gap-2 pt-2 border-t">
+                    <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-orange-200 dark:border-orange-800">
                   {request.status === "matched" && (
                     <>
                       <Button
                         onClick={() => markArrived(request._id)}
                         disabled={actionLoading === request._id}
-                        className="flex-1 bg-blue-500 hover:bg-blue-600"
+                            className="flex-1 bg-blue-500 hover:bg-blue-600 text-sm sm:text-base h-11 sm:h-12 font-semibold"
                         size="lg"
                       >
                         {actionLoading === request._id ? (
                           <Loader2 className="h-4 w-4 animate-spin mr-2" />
                         ) : (
-                          <MapPin className="h-4 w-4 mr-2" />
+                              <MapPin className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
                         )}
-                        I've Arrived at Customer
+                            <span className="hidden sm:inline">I've Arrived at Customer</span>
+                            <span className="sm:hidden">I've Arrived</span>
                       </Button>
                       <Button
                         variant="destructive"
                         onClick={() => cancelRequest(request._id)}
                         disabled={actionLoading === request._id}
                         size="lg"
+                            className="w-full sm:w-auto h-11 sm:h-12"
                       >
-                        <XCircle className="h-4 w-4" />
+                            <XCircle className="h-4 w-4 sm:h-5 sm:w-5" />
                       </Button>
                     </>
                   )}
@@ -827,23 +918,24 @@ export default function AgentDashboardPage() {
                         <Button
                           onClick={() => confirmHandover(request._id)}
                           disabled={actionLoading === request._id}
-                          className="flex-1 bg-orange-500 hover:bg-orange-600"
+                              className="flex-1 bg-orange-500 hover:bg-orange-600 text-sm sm:text-base h-11 sm:h-12 font-semibold"
                           size="lg"
                         >
                           {actionLoading === request._id ? (
                             <Loader2 className="h-4 w-4 animate-spin mr-2" />
                           ) : (
-                            <DollarSign className="h-4 w-4 mr-2" />
+                                <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
                           )}
-                          I've Given Cash
+                              <span className="hidden sm:inline">I've Given Cash</span>
+                              <span className="sm:hidden">Given Cash</span>
                         </Button>
                       ) : (
                         <Button
                           disabled
-                          className="flex-1 bg-green-500"
+                              className="flex-1 bg-green-500 text-sm sm:text-base h-11 sm:h-12 font-semibold"
                           size="lg"
                         >
-                          <CheckCircle className="h-4 w-4 mr-2" />
+                              <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
                           You Confirmed
                         </Button>
                       )}
@@ -852,147 +944,336 @@ export default function AgentDashboardPage() {
                         onClick={() => cancelRequest(request._id)}
                         disabled={actionLoading === request._id || (request.agentConfirmed && request.userConfirmed)}
                         size="lg"
+                            className="w-full sm:w-auto h-11 sm:h-12"
                       >
-                        <XCircle className="h-4 w-4 mr-2" />
+                            <XCircle className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
                         Refuse
                       </Button>
                     </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right Side: Live Navigation Map - Hide when either party has confirmed */}
+                  {request.coordinates && !request.agentConfirmed && !request.userConfirmed && (
+                    <div className="w-full lg:w-1/2 lg:min-w-[400px] border-t lg:border-t-0 lg:border-l border-orange-200 dark:border-orange-800">
+                      <Card className="border-0 rounded-none h-full bg-transparent shadow-none">
+                        <CardHeader className="pb-3 px-4 sm:px-6 pt-4 sm:pt-5">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0">
+                            <CardTitle className="text-base sm:text-lg">Live Navigation</CardTitle>
+                            {request.coordinates && agentLocation && (
+                              <Badge className="bg-blue-500 text-white text-xs sm:text-sm px-2.5 sm:px-3 py-1 self-start sm:self-auto">
+                                <Navigation className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5" />
+                                {getDistanceToClient(request.coordinates)} away
+                              </Badge>
+                            )}
+                          </div>
+                          <CardDescription className="text-xs sm:text-sm mt-1">
+                            Real-time route to customer • Distance updates automatically
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                          <div style={{ height: "400px", width: "100%" }} className="lg:h-[500px] overflow-hidden">
+                            {agentLocation ? (
+                              <GoogleMapsWrapper
+                                userLocation={request.coordinates} // Customer location
+                                agents={[{
+                                  id: user?.id || "agent",
+                                  name: "You",
+                                  phone: user?.phone || "",
+                                  location: agentLocation, // Agent's real-time location
+                                  rating: 5.0,
+                                  totalTransactions: 0,
+                                  distance: (() => {
+                                    if (!request.coordinates || !agentLocation) return 0
+                                    const R = 6371
+                                    const dLat = (request.coordinates.lat - agentLocation.lat) * (Math.PI / 180)
+                                    const dLng = (request.coordinates.lng - agentLocation.lng) * (Math.PI / 180)
+                                    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                                      Math.cos(agentLocation.lat * (Math.PI / 180)) *
+                                      Math.cos(request.coordinates.lat * (Math.PI / 180)) *
+                                      Math.sin(dLng / 2) * Math.sin(dLng / 2)
+                                    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+                                    return R * c
+                                  })(),
+                                  distanceFormatted: getDistanceToClient(request.coordinates) || "Calculating...",
+                                }]}
+                                selectedAgent={{ id: user?.id || "agent" }}
+                                onSelectAgent={() => {}}
+                                showRoute={true} // Always show route to customer
+                                agentLocation={agentLocation} // Real-time agent location
+                              />
+                            ) : (
+                              <div className="h-full flex items-center justify-center bg-gray-100 dark:bg-gray-800">
+                                <div className="text-center">
+                                  <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-2" />
+                                  <p className="text-sm text-muted-foreground">Getting your location...</p>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  )}
+
+                  {/* Arrival Confirmation Message - Show when map is hidden */}
+                  {(request.agentConfirmed || request.userConfirmed) && (
+                    <div className="w-full lg:w-1/2 lg:min-w-[400px] border-t lg:border-t-0 lg:border-l border-green-200 dark:border-green-800">
+                      <Card className="border-2 border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/50 h-full">
+                        <CardContent className="p-4 sm:p-6 flex items-center justify-center h-full min-h-[400px] lg:min-h-[500px]">
+                          <div className="text-center space-y-4">
+                            <div className="w-16 h-16 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mx-auto">
+                              <CheckCircle className="h-8 w-8 text-green-600 dark:text-green-400" />
+                            </div>
+                            <div>
+                              <h4 className="font-semibold text-lg sm:text-xl text-green-800 dark:text-green-200 mb-2">
+                                {request.agentConfirmed && request.userConfirmed
+                                  ? "Both Parties Confirmed!"
+                                  : request.agentConfirmed
+                                  ? "You've Confirmed Arrival"
+                                  : "Customer Has Confirmed"}
+                              </h4>
+                              <p className="text-sm text-green-700 dark:text-green-300">
+                                {request.agentConfirmed && request.userConfirmed
+                                  ? "The transaction will be completed automatically. Map navigation is no longer needed."
+                                  : request.agentConfirmed
+                                  ? "You've confirmed giving cash. Waiting for customer confirmation."
+                                  : "Customer has confirmed receiving cash. Please confirm if you've given the cash."}
+                              </p>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
                   )}
                 </div>
               </div>
             ))}
           </CardContent>
         </Card>
+        </div>
       )}
 
       {/* Pending Requests */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <DollarSign className="h-5 w-5" />
-            Available Requests ({pendingRequests.length})
-          </CardTitle>
-          <CardDescription>
-            {isAvailable
-              ? "Tap to accept a withdrawal request"
-              : "Go online to see and accept requests"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+      <Card className="border-l-4 border-l-blue-500">
+        {/* Uber-style Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 sm:px-6 py-5 rounded-t-lg">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
+              <DollarSign className="h-5 w-5 text-white" />
+            </div>
+            <div className="flex-1">
+              <h2 className="text-xl font-bold">Available Requests</h2>
+              <p className="text-sm text-blue-100 mt-0.5">
+                {isAvailable
+                  ? pendingRequests.length > 0
+                    ? `${pendingRequests.length} new request${pendingRequests.length !== 1 ? "s" : ""} available`
+                    : "No new requests at the moment"
+                  : "Go online to see and accept requests"}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <CardContent className="p-0">
           {!isAvailable ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <AlertCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>You're currently offline</p>
-              <p className="text-sm">Toggle availability to see requests</p>
+            <div className="text-center py-12 px-4">
+              <div className="w-20 h-20 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="h-10 w-10 text-gray-400" />
+              </div>
+              <p className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1">You're currently offline</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">Toggle availability to see requests</p>
             </div>
           ) : pendingRequests.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>No pending requests</p>
-              <p className="text-sm">New requests will appear here automatically</p>
+            <div className="text-center py-12 px-4">
+              <div className="w-20 h-20 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Clock className="h-10 w-10 text-blue-500" />
+              </div>
+              <p className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1">No pending requests</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">New requests will appear here automatically</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {pendingRequests.map((request) => (
+            <div className="space-y-3 sm:space-y-4 p-3 sm:p-4">
+              {pendingRequests.map((request) => {
+                return (
                 <div
                   key={request._id}
-                  className="border rounded-lg p-4 hover:border-primary transition-colors"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4" />
-                        <span className="font-medium">{request.user?.name || "Customer"}</span>
-                        <span className="text-xs text-muted-foreground">
+                    className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden transition-all hover:shadow-xl"
+                  >
+                    {/* Request Header */}
+                    <div className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-2">
+                            <User className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                            <span className="font-semibold text-gray-900 dark:text-white text-base sm:text-lg truncate">
+                              {request.user?.name || "Customer"}
+                            </span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">
                           {timeAgo(request.createdAt)}
                         </span>
                       </div>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <MapPin className="h-3 w-3" />
-                        {request.location}
+                          
+                          <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 mb-2">
+                            <MapPin className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                            <span className="font-mono text-xs truncate">
+                              {request.coordinates 
+                                ? `${request.coordinates.lat.toFixed(4)}, ${request.coordinates.lng.toFixed(4)}`
+                                : request.location}
+                            </span>
                       </div>
+
                       {request.distanceFormatted && (
-                        <div className="flex items-center gap-1 text-sm font-semibold text-primary">
-                          <Navigation className="h-3 w-3" />
+                            <div className="flex items-center gap-1.5 text-sm font-semibold text-red-600 dark:text-red-400">
+                              <AlertCircle className="h-3.5 w-3.5" />
                           <span>{request.distanceFormatted} away</span>
                         </div>
                       )}
                     </div>
-                    <div className="text-right">
-                      <div className="text-xl font-bold text-green-600">
+
+                        {/* Amount Badge */}
+                        <div className="flex-shrink-0">
+                          <div className="bg-green-500 text-white px-3 sm:px-4 py-2 rounded-xl shadow-md">
+                            <div className="text-lg sm:text-xl font-bold">
                         <CurrencyFormatter amount={request.amount} />
+                            </div>
+                          </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Mini map preview for pending requests */}
-                  {request.coordinates && (
-                    <div className="mt-3 rounded-lg overflow-hidden border">
-                      <CustomerLocationMap
-                        customerLocation={request.coordinates}
-                        agentLocation={agentLocation}
-                        height="120px"
-                      />
+                    {/* Mini Map Visualization */}
+                    {request.coordinates && agentLocation && (
+                      <div className="px-4 sm:px-5 pb-4">
+                        <div className="relative bg-gradient-to-br from-blue-50 to-green-50 dark:from-gray-700 dark:to-gray-800 rounded-xl p-4 h-32 sm:h-40 overflow-hidden">
+                          {/* Map Background Pattern */}
+                          <div className="absolute inset-0 opacity-10">
+                            <div className="absolute inset-0" style={{
+                              backgroundImage: `radial-gradient(circle at 20% 50%, #3b82f6 2px, transparent 2px),
+                                                radial-gradient(circle at 80% 50%, #ef4444 2px, transparent 2px)`,
+                              backgroundSize: '40px 40px',
+                            }}></div>
+                          </div>
+
+                          {/* Agent and Customer Icons */}
+                          <div className="relative h-full flex items-center justify-between">
+                            {/* Agent (You) */}
+                            <div className="flex flex-col items-center z-10">
+                              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-blue-500 rounded-full border-4 border-white shadow-lg flex items-center justify-center">
+                                <Navigation className="h-6 w-6 sm:h-7 sm:w-7 text-white rotate-45" />
+                              </div>
+                              <span className="text-xs font-medium text-blue-700 dark:text-blue-300 mt-1.5">You</span>
+                            </div>
+
+                            {/* Connection Line */}
+                            <div className="flex-1 relative h-1 mx-2 sm:mx-4">
+                              <div className="absolute inset-0 bg-gradient-to-r from-blue-500 via-purple-500 to-red-500 h-0.5 rounded-full"></div>
+                              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-purple-500 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow-md">
+                                {request.distanceFormatted?.replace(" away", "") || "0m"}
+                              </div>
+                            </div>
+
+                            {/* Customer */}
+                            <div className="flex flex-col items-center z-10">
+                              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-red-500 rounded-full border-4 border-white shadow-lg flex items-center justify-center">
+                                <MapPin className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
+                              </div>
+                              <span className="text-xs font-medium text-red-700 dark:text-red-300 mt-1.5">Customer</span>
+                            </div>
+                          </div>
+
+                          {/* Coordinates at bottom */}
+                          <div className="absolute bottom-2 left-0 right-0 text-center">
+                            <p className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                              {request.coordinates.lat.toFixed(4)}, {request.coordinates.lng.toFixed(4)}
+                            </p>
+                          </div>
+                        </div>
                     </div>
                   )}
 
-                  <div className="flex gap-2 mt-3">
+                    {/* Action Buttons */}
+                    <div className="px-4 sm:px-5 pb-4 sm:pb-5 space-y-2">
                     {request.coordinates && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              const url = `https://www.google.com/maps/search/?api=1&query=${request.coordinates!.lat},${request.coordinates!.lng}`
+                              window.open(url, "_blank")
+                            }}
+                            className="text-blue-600 border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                          >
+                            <Navigation className="h-4 w-4 mr-1.5" />
+                            <span className="text-xs sm:text-sm">View in Maps</span>
+                          </Button>
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => openGoogleMaps(request.coordinates!.lat, request.coordinates!.lng, request.user?.name || "Customer")}
-                        className="text-blue-600 border-blue-300"
+                            className="text-blue-600 border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                       >
-                        <Navigation className="h-4 w-4 mr-1" />
-                        View in Maps
+                            <Navigation className="h-4 w-4 mr-1.5" />
+                            <span className="text-xs sm:text-sm">Get Directions</span>
                       </Button>
+                        </div>
                     )}
+                      
+                      {/* Accept Button - Full Width */}
                     <Button
                       onClick={() => acceptRequest(request._id)}
                       disabled={actionLoading === request._id}
-                      className="flex-1 bg-green-500 hover:bg-green-600"
+                        className="w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3 sm:py-3.5 text-base sm:text-lg shadow-lg hover:shadow-xl transition-all"
+                        size="lg"
                     >
                       {actionLoading === request._id ? (
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          <>
+                            <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                            <span>Accepting...</span>
+                          </>
                       ) : (
-                        <CheckCircle className="h-4 w-4 mr-2" />
+                          <>
+                            <CheckCircle className="h-5 w-5 mr-2" />
+                            <span>Accept</span>
+                          </>
                       )}
-                      Accept
                     </Button>
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </CardContent>
       </Card>
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 sm:pt-6 px-4 sm:px-6 pb-4 sm:pb-6">
             <div className="text-center">
-              <p className="text-2xl font-bold">{stats.activeRequests}</p>
-              <p className="text-sm text-muted-foreground">Active Requests</p>
+              <p className="text-xl sm:text-2xl font-bold">{stats.activeRequests}</p>
+              <p className="text-xs sm:text-sm text-muted-foreground">Active Requests</p>
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="pt-4 sm:pt-6 px-4 sm:px-6 pb-4 sm:pb-6">
             <div className="text-center">
-              <p className="text-2xl font-bold text-green-600">
-                <CurrencyFormatter amount={stats.todayEarnings} />
+              <p className="text-xl sm:text-2xl font-bold text-green-600">
+                <CurrencyFormatter amount={stats.todayCommission} />
               </p>
-              <p className="text-sm text-muted-foreground">Today's Earnings</p>
+              <p className="text-xs sm:text-sm text-muted-foreground">Today's Commission</p>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
+        <Card className="sm:col-span-2 lg:col-span-1">
+          <CardContent className="pt-4 sm:pt-6 px-4 sm:px-6 pb-4 sm:pb-6">
             <div className="text-center">
-              <p className="text-2xl font-bold">{stats.todayTransactionCount}</p>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xl sm:text-2xl font-bold">{stats.todayTransactionCount}</p>
+              <p className="text-xs sm:text-sm text-muted-foreground">
                 {stats.todayTransactionCount === 1 ? "Transaction" : "Transactions"} Today
               </p>
             </div>
@@ -1001,31 +1282,41 @@ export default function AgentDashboardPage() {
       </div>
 
       {/* Additional Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Total Earnings</CardTitle>
-            <CardDescription>All-time commission from completed transactions</CardDescription>
+          <CardHeader className="px-4 sm:px-6">
+            <CardTitle className="text-base sm:text-lg">Total Commission</CardTitle>
+            <CardDescription className="text-xs sm:text-sm">All-time commission earned from completed transactions</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-green-600">
-              <CurrencyFormatter amount={stats.totalEarnings} />
+          <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
+            <div className="text-2xl sm:text-3xl font-bold text-green-600">
+              <CurrencyFormatter amount={stats.totalCommission} />
             </div>
-            <p className="text-sm text-muted-foreground mt-2">
+            <p className="text-xs sm:text-sm text-muted-foreground mt-2">
               From {stats.totalCompleted} {stats.totalCompleted === 1 ? "transaction" : "transactions"}
             </p>
+            {stats.totalEarnings > 0 && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Withdrawal amount received: <CurrencyFormatter amount={stats.totalEarnings} />
+              </p>
+            )}
+            {(stats.totalEarnings + stats.totalCommission) > 0 && (
+              <p className="text-xs font-semibold text-green-600 mt-1">
+                Total (withdrawal + commission): <CurrencyFormatter amount={stats.totalEarnings + stats.totalCommission} />
+              </p>
+            )}
           </CardContent>
         </Card>
         <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Pending Requests</CardTitle>
-            <CardDescription>Available withdrawal requests waiting for agents</CardDescription>
+          <CardHeader className="px-4 sm:px-6">
+            <CardTitle className="text-base sm:text-lg">Pending Requests</CardTitle>
+            <CardDescription className="text-xs sm:text-sm">Available withdrawal requests waiting for agents</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-orange-600">
+          <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
+            <div className="text-2xl sm:text-3xl font-bold text-orange-600">
               {stats.pendingRequests}
             </div>
-            <p className="text-sm text-muted-foreground mt-2">
+            <p className="text-xs sm:text-sm text-muted-foreground mt-2">
               {stats.pendingRequests === 0 
                 ? "No requests available" 
                 : `${stats.pendingRequests} ${stats.pendingRequests === 1 ? "request" : "requests"} waiting`}

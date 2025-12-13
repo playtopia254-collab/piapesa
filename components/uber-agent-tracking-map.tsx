@@ -1,0 +1,779 @@
+"use client"
+
+import { useEffect, useState, useRef, useCallback } from "react"
+import { GoogleMap, useJsApiLoader, Marker, Circle } from "@react-google-maps/api"
+import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Loader2, Star, MapPin, Navigation, AlertCircle } from "lucide-react"
+import { getCurrentLocation, watchLocation } from "@/lib/location-utils"
+
+interface Agent {
+  id: string
+  name: string
+  phone: string
+  location: { lat: number; lng: number }
+  rating: number
+  totalTransactions: number
+  isAvailable?: boolean
+  distance?: number // in meters
+  distanceFormatted?: string
+  totalReviews?: number
+}
+
+interface UberAgentTrackingMapProps {
+  onSelectAgent?: (agent: Agent) => void
+  selectedAgentId?: string | null
+  height?: string
+}
+
+// Use the same libraries as google-maps-wrapper to avoid conflicts
+const libraries: ("places" | "geometry" | "drawing" | "visualization")[] = ["places", "geometry", "drawing"]
+
+const mapContainerStyle = {
+  width: "100%",
+  height: "100%",
+}
+
+const defaultCenter = {
+  lat: -1.2921, // Nairobi
+  lng: 36.8219,
+}
+
+// Format distance for display
+function formatDistance(meters: number): string {
+  if (meters < 1000) {
+    return `${Math.round(meters)} m away`
+  }
+  return `${(meters / 1000).toFixed(1)} km away`
+}
+
+export function UberAgentTrackingMap({
+  onSelectAgent,
+  selectedAgentId,
+  height = "600px",
+}: UberAgentTrackingMapProps) {
+  const [map, setMap] = useState<google.maps.Map | null>(null)
+  const [isMapReady, setIsMapReady] = useState(false)
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [agents, setAgents] = useState<Agent[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState("")
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
+  const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null)
+  
+  // Refs for marker animations
+  const markerRefs = useRef<{ [key: string]: google.maps.Marker }>({})
+  const previousPositions = useRef<{ [key: string]: { lat: number; lng: number } }>({})
+  const animationFrames = useRef<{ [key: string]: number }>({})
+  
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""
+
+  // Use the same loader ID as google-maps-wrapper to avoid conflicts
+  const { isLoaded, loadError } = useJsApiLoader({
+    id: "google-map-script",
+    googleMapsApiKey: apiKey,
+    libraries,
+  })
+
+  // Get user's location with high accuracy
+  useEffect(() => {
+    let watchCleanup: (() => void) | null = null
+
+    const initializeLocation = async () => {
+      try {
+        setIsLoading(true)
+        
+        // Get initial location
+        const location = await getCurrentLocation()
+        setUserLocation({ lat: location.lat, lng: location.lng })
+        setLocationAccuracy(location.accuracy || null)
+        
+        // Watch for location updates
+        watchCleanup = watchLocation(
+          (location) => {
+            setUserLocation({ lat: location.lat, lng: location.lng })
+            setLocationAccuracy(location.accuracy || null)
+          },
+          (error) => {
+            console.error("Location watch error:", error)
+          }
+        )
+      } catch (error) {
+        console.error("Failed to get location:", error)
+        setError("Failed to get your location. Please enable location permissions.")
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    initializeLocation()
+
+    return () => {
+      if (watchCleanup) {
+        watchCleanup()
+      }
+    }
+  }, [])
+
+  // Fetch nearby agents
+  const fetchAgents = useCallback(async () => {
+    if (!userLocation) return
+
+    try {
+      const response = await fetch(
+        `/api/agents/nearby?lat=${userLocation.lat}&lng=${userLocation.lng}&maxDistance=20`
+      )
+      const data = await response.json()
+
+      if (data.success && data.agents) {
+        console.log("📊 Agents received from API:", data.agents.map((a: any) => ({
+          name: a.name,
+          isAvailable: a.isAvailable,
+        })))
+        
+        // Calculate distances using Google Maps Geometry Library
+        const agentsWithDistance = data.agents.map((agent: any) => {
+          if (!window.google?.maps?.geometry) {
+            // Fallback to existing distance if geometry library not loaded
+            return {
+              ...agent,
+              distance: agent.distance ? agent.distance * 1000 : 0, // Convert km to meters
+              distanceFormatted: agent.distanceFormatted || "Unknown",
+              isAvailable: agent.isAvailable !== undefined ? agent.isAvailable : true, // Preserve availability status
+            }
+          }
+
+          const userLatLng = new google.maps.LatLng(userLocation.lat, userLocation.lng)
+          const agentLatLng = new google.maps.LatLng(agent.location.lat, agent.location.lng)
+          
+          // Use Google Maps Geometry Library for accurate distance calculation
+          let distanceMeters = 0
+          
+          if (window.google?.maps?.geometry) {
+            distanceMeters = google.maps.geometry.spherical.computeDistanceBetween(
+              userLatLng,
+              agentLatLng
+            )
+          } else {
+            // Fallback: use server-provided distance or calculate manually
+            if (agent.distance) {
+              distanceMeters = agent.distance * 1000 // Convert km to meters
+            } else {
+              // Manual calculation as last resort
+              const R = 6371000 // Earth radius in meters
+              const dLat = (agent.location.lat - userLocation.lat) * Math.PI / 180
+              const dLng = (agent.location.lng - userLocation.lng) * Math.PI / 180
+              const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(userLocation.lat * Math.PI / 180) * Math.cos(agent.location.lat * Math.PI / 180) *
+                Math.sin(dLng / 2) * Math.sin(dLng / 2)
+              const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+              distanceMeters = R * c
+            }
+          }
+
+          return {
+            ...agent,
+            distance: distanceMeters,
+            distanceFormatted: formatDistance(distanceMeters),
+            isAvailable: agent.isAvailable !== undefined ? agent.isAvailable : true, // Preserve availability status
+          }
+        })
+
+        // Sort: available first, then by distance
+        const sortedAgents = agentsWithDistance.sort((a: Agent, b: Agent) => {
+          // First sort by availability (available first)
+          if (a.isAvailable !== b.isAvailable) {
+            return a.isAvailable ? -1 : 1
+          }
+          // Then sort by distance
+          return (a.distance || 0) - (b.distance || 0)
+        })
+        
+        setAgents(sortedAgents)
+      }
+    } catch (error) {
+      console.error("Failed to fetch agents:", error)
+    }
+  }, [userLocation])
+
+  // Fetch agents when location is available
+  useEffect(() => {
+    if (userLocation && isMapReady) {
+      fetchAgents()
+      
+      // Set up real-time updates every 4 seconds
+      const interval = setInterval(() => {
+        fetchAgents()
+      }, 4000)
+
+      return () => clearInterval(interval)
+    }
+  }, [userLocation, isMapReady, fetchAgents])
+
+  // Update selected agent when prop changes
+  useEffect(() => {
+    if (selectedAgentId && agents.length > 0) {
+      const agent = agents.find((a) => a.id === selectedAgentId)
+      if (agent) {
+        setSelectedAgent(agent)
+        // Zoom to agent
+        if (map && agent.location) {
+          map.setCenter(new google.maps.LatLng(agent.location.lat, agent.location.lng))
+          map.setZoom(15)
+        }
+      }
+    } else {
+      setSelectedAgent(null)
+    }
+  }, [selectedAgentId, agents, map])
+
+  // Center map on user location
+  useEffect(() => {
+    if (map && userLocation && isMapReady) {
+      map.setCenter(new google.maps.LatLng(userLocation.lat, userLocation.lng))
+      map.setZoom(14)
+    }
+  }, [map, userLocation, isMapReady])
+
+  // Smooth marker animation
+  const animateMarker = useCallback((marker: google.maps.Marker, from: { lat: number; lng: number }, to: { lat: number; lng: number }) => {
+    const startTime = Date.now()
+    const duration = 1000 // 1 second animation
+
+    const animate = () => {
+      const elapsed = Date.now() - startTime
+      const progress = Math.min(elapsed / duration, 1)
+      
+      // Easing function (ease-out)
+      const easeOut = 1 - Math.pow(1 - progress, 3)
+      
+      const lat = from.lat + (to.lat - from.lat) * easeOut
+      const lng = from.lng + (to.lng - from.lng) * easeOut
+      
+      marker.setPosition(new google.maps.LatLng(lat, lng))
+      
+      if (progress < 1) {
+        const frameId = requestAnimationFrame(animate)
+        animationFrames.current[marker.getTitle() || ""] = frameId
+      }
+    }
+    
+    animate()
+  }, [])
+
+  const onMapLoad = useCallback((mapInstance: google.maps.Map) => {
+    setMap(mapInstance)
+    setIsMapReady(true)
+  }, [])
+
+  const onMapUnmount = useCallback(() => {
+    // Clean up animation frames
+    Object.values(animationFrames.current).forEach((frameId) => {
+      cancelAnimationFrame(frameId)
+    })
+    animationFrames.current = {}
+    markerRefs.current = {}
+    previousPositions.current = {}
+    
+    setMap(null)
+    setIsMapReady(false)
+  }, [])
+
+  // Handle agent selection
+  const handleAgentClick = (agent: Agent) => {
+    setSelectedAgent(agent)
+    if (map && agent.location) {
+      map.setCenter(new google.maps.LatLng(agent.location.lat, agent.location.lng))
+      map.setZoom(15)
+    }
+    onSelectAgent?.(agent)
+  }
+
+  // Create user marker icon (blue circular)
+  const createUserMarkerIcon = (): google.maps.Icon | undefined => {
+    if (!isMapReady || typeof window === "undefined" || !window.google) return undefined
+    return {
+      url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
+        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+          <defs>
+            <filter id="userShadow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
+              <feOffset dx="0" dy="2" result="offsetblur"/>
+              <feComponentTransfer>
+                <feFuncA type="linear" slope="0.3"/>
+              </feComponentTransfer>
+              <feMerge>
+                <feMergeNode/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+          </defs>
+          <g filter="url(#userShadow)">
+            <circle cx="24" cy="24" r="18" fill="#3b82f6" stroke="#ffffff" stroke-width="3"/>
+            <circle cx="24" cy="20" r="7" fill="#ffffff" opacity="0.9"/>
+            <circle cx="24" cy="24" r="5" fill="#3b82f6"/>
+          </g>
+        </svg>
+      `),
+      scaledSize: new google.maps.Size(48, 48),
+      anchor: new google.maps.Point(24, 24),
+    }
+  }
+
+  // Create agent marker icon (orange pin with subtle glow for pulse effect)
+  const createAgentMarkerIcon = (isSelected: boolean, agentId: string, isAvailable: boolean = true): google.maps.Icon | undefined => {
+    if (!isMapReady || typeof window === "undefined" || !window.google) return undefined
+    let color = "#f97316" // Default orange
+    let shadowColor = "#ea580c"
+    
+    if (isSelected) {
+      color = "#22c55e" // Green when selected
+      shadowColor = "#16a34a"
+    } else if (!isAvailable) {
+      color = "#6b7280" // Gray when offline
+      shadowColor = "#4b5563"
+    }
+    
+    return {
+      url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
+        <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 56 56">
+          <defs>
+            <filter id="agentShadow${agentId}" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+              <feOffset dx="0" dy="2" result="offsetblur"/>
+              <feComponentTransfer>
+                <feFuncA type="linear" slope="0.4"/>
+              </feComponentTransfer>
+              <feMerge>
+                <feMergeNode/>
+                <feMergeNode in="SourceGraphic"/>
+              </feMerge>
+            </filter>
+            <radialGradient id="agentGradient${agentId}">
+              <stop offset="0%" style="stop-color:${color};stop-opacity:0.4" />
+              <stop offset="100%" style="stop-color:${color};stop-opacity:0.1" />
+            </radialGradient>
+          </defs>
+          <g filter="url(#agentShadow${agentId})">
+            <!-- Pulse ring effect (static, will be animated via CSS overlay if needed) -->
+            <circle cx="28" cy="28" r="22" fill="url(#agentGradient${agentId})"/>
+            <!-- Main pin shape -->
+            <path d="M28 10 C22 10, 17 15, 17 21 C17 27, 28 46, 28 46 C28 46, 39 27, 39 21 C39 15, 34 10, 28 10 Z" 
+                  fill="${color}" 
+                  stroke="#ffffff" 
+                  stroke-width="2.5"/>
+            <!-- Inner highlight -->
+            <circle cx="28" cy="21" r="9" fill="#ffffff" opacity="0.95"/>
+            <!-- Center dot -->
+            <circle cx="28" cy="21" r="6" fill="${color}"/>
+          </g>
+        </svg>
+      `),
+      scaledSize: new google.maps.Size(56, 56),
+      anchor: new google.maps.Point(28, 46),
+    }
+  }
+
+  if (loadError) {
+    return (
+      <Card>
+        <CardContent className="py-12">
+          <div className="text-center text-red-500">
+            <p className="font-semibold text-lg">Error loading Google Maps</p>
+            <p className="text-sm text-muted-foreground mt-2">{loadError.message}</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (!isLoaded) {
+    return (
+      <Card>
+        <CardContent className="py-12">
+          <div className="flex flex-col items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+            <p className="text-muted-foreground">Loading Google Maps...</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (!apiKey) {
+    return (
+      <Card>
+        <CardContent className="py-12">
+          <div className="text-center text-red-500">
+            <p className="font-semibold text-lg">Google Maps API Key Missing</p>
+            <p className="text-sm text-muted-foreground mt-2">
+              Please add your API key to `.env.local`
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardContent className="py-12">
+          <div className="flex flex-col items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+            <p className="text-muted-foreground">Getting your location...</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="py-12">
+          <div className="text-center text-red-500">
+            <p className="font-semibold text-lg">{error}</p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (!userLocation) {
+    return (
+      <Card>
+        <CardContent className="py-12">
+          <div className="text-center text-muted-foreground">
+            Location not available
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const center = userLocation || defaultCenter
+
+  return (
+    <div className="w-full space-y-4">
+      {/* Location Accuracy Warning */}
+      {locationAccuracy && locationAccuracy > 100 && (
+        <Card className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950/30 mb-4">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <h4 className="font-semibold text-yellow-900 dark:text-yellow-100 mb-1">
+                  Location Accuracy Warning
+                </h4>
+                <p className="text-sm text-yellow-800 dark:text-yellow-200 mb-2">
+                  Your location accuracy is ±{Math.round(locationAccuracy)}m. This is less accurate because you're using a laptop/desktop.
+                </p>
+                <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                  <strong>💡 Tip:</strong> For best accuracy (±5-20m), use a mobile phone with GPS. Laptops use WiFi/IP location which can be off by 100-1000m.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Map Container */}
+      <Card className="overflow-hidden">
+        <div style={{ height }} className="relative">
+          <GoogleMap
+            mapContainerStyle={mapContainerStyle}
+            center={center}
+            zoom={14}
+            onLoad={onMapLoad}
+            onUnmount={onMapUnmount}
+            options={{
+              disableDefaultUI: false,
+              zoomControl: true,
+              streetViewControl: false,
+              mapTypeControl: false,
+              fullscreenControl: true,
+              styles: [
+                {
+                  featureType: "poi",
+                  elementType: "labels",
+                  stylers: [{ visibility: "off" }],
+                },
+              ],
+            }}
+          >
+            {/* User location marker */}
+            {isMapReady && createUserMarkerIcon() && userLocation && (
+              <Marker
+                position={userLocation}
+                icon={createUserMarkerIcon()}
+                title="Your Location"
+                zIndex={1000}
+                optimized={false}
+              />
+            )}
+
+            {/* User location accuracy circle - size based on actual accuracy */}
+            {userLocation && (
+              <Circle
+                center={userLocation}
+                radius={locationAccuracy ? Math.max(locationAccuracy, 50) : 50}
+                options={{
+                  fillColor: locationAccuracy && locationAccuracy > 100 ? "#f59e0b" : "#3b82f6",
+                  fillOpacity: 0.1,
+                  strokeColor: locationAccuracy && locationAccuracy > 100 ? "#f59e0b" : "#3b82f6",
+                  strokeOpacity: 0.4,
+                  strokeWeight: 2,
+                  zIndex: 1,
+                }}
+              />
+            )}
+
+            {/* Agent markers */}
+            {isMapReady &&
+              agents.map((agent) => {
+                if (!agent.location || !agent.location.lat || !agent.location.lng) return null
+
+                const isSelected = selectedAgent?.id === agent.id
+                const previousPos = previousPositions.current[agent.id]
+                const currentPos = { lat: agent.location.lat, lng: agent.location.lng }
+
+                // Animate marker if position changed
+                if (previousPos && (previousPos.lat !== currentPos.lat || previousPos.lng !== currentPos.lng)) {
+                  const marker = markerRefs.current[agent.id]
+                  if (marker) {
+                    animateMarker(marker, previousPos, currentPos)
+                  }
+                }
+
+                previousPositions.current[agent.id] = currentPos
+
+                return (
+                  <Marker
+                    key={agent.id}
+                    position={currentPos}
+                    icon={createAgentMarkerIcon(isSelected, agent.id, agent.isAvailable)}
+                    title={`${agent.name} - ${agent.distanceFormatted || "Unknown distance"}${!agent.isAvailable ? " (Offline)" : ""}`}
+                    onClick={() => handleAgentClick(agent)}
+                    zIndex={isSelected ? 1001 : agent.isAvailable ? 500 : 400}
+                    onLoad={(marker) => {
+                      markerRefs.current[agent.id] = marker
+                    }}
+                    animation={undefined} // We handle animation manually
+                  />
+                )
+              })}
+          </GoogleMap>
+        </div>
+      </Card>
+
+      {/* Agent List Panel - Uber Style */}
+      <Card>
+        <CardContent className="p-0">
+          <div className="p-4 border-b bg-muted/50">
+            <h3 className="font-semibold text-lg flex items-center gap-2">
+              <MapPin className="h-5 w-5 text-primary" />
+              Agents ({agents.filter(a => a.isAvailable === true).length} online, {agents.length} total)
+            </h3>
+          </div>
+          <div className="max-h-[500px] overflow-y-auto pb-4">
+            {agents.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground">
+                <p>No agents available nearby</p>
+              </div>
+            ) : (
+              <div>
+                {/* Available Agents Section - Only agents who pressed "Go Online" */}
+                {agents.filter(a => a.isAvailable === true).length > 0 && (
+                  <>
+                    <div className="px-4 py-2 bg-green-50 dark:bg-green-950/30 border-b">
+                      <h4 className="text-sm font-semibold text-green-700 dark:text-green-400">
+                        Available - Online ({agents.filter(a => a.isAvailable === true).length})
+                      </h4>
+                    </div>
+                    <div className="px-4 py-2.5 bg-green-50/50 dark:bg-green-950/20 border-b">
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        Tap on an agent marker or select from the list above
+                      </p>
+                    </div>
+                    <div className="divide-y">
+                      {agents
+                        .filter(a => a.isAvailable === true)
+                        .map((agent) => {
+                          const isSelected = selectedAgent?.id === agent.id
+                          return (
+                            <div
+                              key={agent.id}
+                              className={`p-4 cursor-pointer transition-all relative isolate ${
+                                isSelected
+                                  ? "bg-green-50 dark:bg-green-950 border-l-4 border-green-500"
+                                  : "hover:bg-muted/50"
+                              }`}
+                              onClick={() => handleAgentClick(agent)}
+                            >
+                              <div className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                  {/* Avatar */}
+                                  <div
+                                    className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${
+                                      isSelected
+                                        ? "bg-green-100 dark:bg-green-900 ring-2 ring-green-500"
+                                        : "bg-orange-100 dark:bg-orange-900"
+                                    }`}
+                                  >
+                                    <span
+                                      className={`text-lg font-bold ${
+                                        isSelected
+                                          ? "text-green-600 dark:text-green-400"
+                                          : "text-orange-600 dark:text-orange-400"
+                                      }`}
+                                    >
+                                      {agent.name.charAt(0).toUpperCase()}
+                                    </span>
+                                  </div>
+
+                                  {/* Agent Info */}
+                                  <div className="flex-1 min-w-0 overflow-hidden">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <h4 className="font-semibold text-base truncate">{agent.name}</h4>
+                                      {isSelected && (
+                                        <Badge className="bg-green-500 text-white text-xs flex-shrink-0">Selected</Badge>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap">
+                                      <div className="flex items-center gap-1">
+                                        <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400 flex-shrink-0" />
+                                        <span className="font-medium">{agent.rating.toFixed(1)}</span>
+                                      </div>
+                                      <span>•</span>
+                                      <span>{agent.totalTransactions} {agent.totalTransactions === 1 ? "transaction" : "transactions"}</span>
+                                      {agent.totalReviews !== undefined && agent.totalReviews > 0 && (
+                                        <>
+                                          <span>•</span>
+                                          <span>{agent.totalReviews} reviews</span>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Distance */}
+                                <div className="text-right flex-shrink-0">
+                                  <Badge
+                                    variant="outline"
+                                    className={`font-semibold whitespace-nowrap ${
+                                      isSelected
+                                        ? "bg-green-100 dark:bg-green-900 border-green-500 text-green-700 dark:text-green-300"
+                                        : "bg-primary/10 text-primary border-primary"
+                                    }`}
+                                  >
+                                    {agent.distanceFormatted || "Unknown"}
+                                  </Badge>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                    </div>
+                  </>
+                )}
+
+                {/* Offline Agents Section - Agents who haven't pressed "Go Online" */}
+                {agents.filter(a => a.isAvailable !== true).length > 0 && (
+                  <>
+                    <div className="px-4 py-2 bg-gray-50 dark:bg-gray-900/30 border-b border-t">
+                      <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-400">
+                        Offline ({agents.filter(a => a.isAvailable !== true).length})
+                      </h4>
+                    </div>
+                    <div className="divide-y">
+                      {agents
+                        .filter(a => a.isAvailable !== true)
+                        .map((agent) => {
+                          const isSelected = selectedAgent?.id === agent.id
+                          return (
+                            <div
+                              key={agent.id}
+                              className={`p-4 cursor-pointer transition-all relative isolate ${
+                                isSelected
+                                  ? "bg-green-50 dark:bg-green-950 border-l-4 border-green-500"
+                                  : "opacity-60 bg-muted/30"
+                              }`}
+                              onClick={() => handleAgentClick(agent)}
+                            >
+                              <div className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                  {/* Avatar */}
+                                  <div
+                                    className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${
+                                      isSelected
+                                        ? "bg-green-100 dark:bg-green-900 ring-2 ring-green-500"
+                                        : "bg-gray-100 dark:bg-gray-800"
+                                    }`}
+                                  >
+                                    <span
+                                      className={`text-lg font-bold ${
+                                        isSelected
+                                          ? "text-green-600 dark:text-green-400"
+                                          : "text-gray-600 dark:text-gray-400"
+                                      }`}
+                                    >
+                                      {agent.name.charAt(0).toUpperCase()}
+                                    </span>
+                                  </div>
+
+                                  {/* Agent Info */}
+                                  <div className="flex-1 min-w-0 overflow-hidden">
+                                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                      <h4 className="font-semibold text-base truncate">{agent.name}</h4>
+                                      <Badge variant="secondary" className="text-xs flex-shrink-0">Offline</Badge>
+                                      {isSelected && (
+                                        <Badge className="bg-green-500 text-white text-xs flex-shrink-0">Selected</Badge>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap">
+                                      <div className="flex items-center gap-1">
+                                        <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400 flex-shrink-0" />
+                                        <span className="font-medium">{agent.rating.toFixed(1)}</span>
+                                      </div>
+                                      <span>•</span>
+                                      <span>{agent.totalTransactions} {agent.totalTransactions === 1 ? "transaction" : "transactions"}</span>
+                                      {agent.totalReviews !== undefined && agent.totalReviews > 0 && (
+                                        <>
+                                          <span>•</span>
+                                          <span>{agent.totalReviews} reviews</span>
+                                        </>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Distance */}
+                                <div className="text-right flex-shrink-0">
+                                  <Badge
+                                    variant="outline"
+                                    className={`font-semibold whitespace-nowrap ${
+                                      isSelected
+                                        ? "bg-green-100 dark:bg-green-900 border-green-500 text-green-700 dark:text-green-300"
+                                        : "bg-gray-100 dark:bg-gray-800 border-gray-300 text-gray-600 dark:text-gray-400"
+                                    }`}
+                                  >
+                                    {agent.distanceFormatted || "Unknown"}
+                                  </Badge>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+

@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, amount, location, notes, lat, lng } = body
+    const { userId, amount, location, notes, lat, lng, agentId } = body
 
     // Validation
     if (!userId || !amount) {
@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
       location: location || user.location || "Not specified",
       notes: notes || "",
       status: "pending", // pending, matched, in_progress, completed, cancelled, expired
-      agentId: null,
+      agentId: agentId ? new ObjectId(agentId) : null, // Optional: specific agent selected by user
       createdAt: new Date(),
       updatedAt: new Date(),
       acceptedAt: null,
@@ -196,18 +196,88 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await withdrawalRequestsCollection.insertOne(withdrawalRequest)
+    const requestId = result.insertedId.toString()
+
+    // Create notifications
+    const notificationsCollection = db.collection("notifications")
+    
+    // Notify the user that their request was created
+    await notificationsCollection.insertOne({
+      userId: new ObjectId(userId),
+      type: "agent_request",
+      title: "Withdrawal Request Created",
+      message: agentId 
+        ? `Your withdrawal request of KES ${amountNum.toLocaleString()} has been sent to the agent.`
+        : `Your withdrawal request of KES ${amountNum.toLocaleString()} has been created. We're looking for nearby agents.`,
+      read: false,
+      link: `/dashboard/agent-requests`,
+      metadata: {
+        requestId: requestId,
+        amount: amountNum,
+        status: "pending",
+      },
+      createdAt: new Date(),
+    })
+
+    // If a specific agent was selected, notify that agent
+    if (agentId) {
+      await notificationsCollection.insertOne({
+        userId: new ObjectId(agentId),
+        type: "agent_request",
+        title: "New Withdrawal Request",
+        message: `You have a new withdrawal request for KES ${amountNum.toLocaleString()} at ${location || "your area"}.`,
+        read: false,
+        link: `/dashboard/agent-dashboard`,
+        metadata: {
+          requestId: requestId,
+          amount: amountNum,
+          status: "pending",
+        },
+        createdAt: new Date(),
+      })
+    } else {
+      // Notify all available agents about the new request
+      // Find all available agents
+      const availableAgents = await usersCollection.find({
+        isAgent: true,
+        "agentStatus.available": true,
+      }).toArray()
+
+      // Create notifications for all available agents
+      const agentNotifications = availableAgents.map((agent) => ({
+        userId: agent._id,
+        type: "agent_request",
+        title: "New Withdrawal Request Available",
+        message: `A new withdrawal request for KES ${amountNum.toLocaleString()} is available near you.`,
+        read: false,
+        link: `/dashboard/agent-dashboard`,
+        metadata: {
+          requestId: requestId,
+          amount: amountNum,
+          status: "pending",
+        },
+        createdAt: new Date(),
+      }))
+
+      if (agentNotifications.length > 0) {
+        await notificationsCollection.insertMany(agentNotifications)
+      }
+    }
 
     return NextResponse.json({
       success: true,
       request: {
         ...withdrawalRequest,
-        _id: result.insertedId.toString(),
+        _id: requestId,
         userId: userId,
+        agentId: withdrawalRequest.agentId?.toString() || null,
         createdAt: withdrawalRequest.createdAt.toISOString(),
         updatedAt: withdrawalRequest.updatedAt.toISOString(),
         expiresAt: withdrawalRequest.expiresAt.toISOString(),
       },
-      message: "Withdrawal request created. Looking for nearby agents...",
+      message: agentId 
+        ? "Withdrawal request sent to selected agent. Waiting for acceptance..."
+        : "Withdrawal request created. Looking for nearby agents...",
     })
   } catch (error) {
     console.error("Create withdrawal request error:", error)

@@ -124,7 +124,7 @@ export async function sendOTPEmail(email: string, otpCode: string): Promise<bool
             <hr style="border: none; border-top: 1px solid #ddd; margin: 30px 0;">
             
             <p style="color: #999; font-size: 12px; text-align: center; margin: 0;">
-              © 2024 Pia Pesa. All rights reserved.<br>
+              © ${new Date().getFullYear()} Pia Pesa. All rights reserved.<br>
               This is an automated message, please do not reply.
             </p>
           </div>

@@ -25,10 +25,10 @@ export default function AuthLayout({
         {/* Auth Form */}
         <Card className="p-6">{children}</Card>
 
-        {/* Demo Notice */}
-        <div className="text-center text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
-          <p className="font-medium mb-1">⚠️ DEMO APPLICATION</p>
-          <p>This is a non-production demo. No real money movements occur.</p>
+        {/* Footer */}
+        <div className="text-center text-xs text-muted-foreground">
+          <p>© {new Date().getFullYear()} Pia Pesa. All rights reserved.</p>
+          <p className="mt-1">Secure digital wallet for Kenya</p>
         </div>
       </div>
     </div>

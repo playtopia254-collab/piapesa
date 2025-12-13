@@ -270,6 +270,20 @@ export default function AdminLayout({
 
         {/* Page content */}
         <main className="p-4 pb-20 lg:pb-4">{children}</main>
+
+        {/* Footer */}
+        <footer className="border-t border-border mt-auto py-4 px-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">
+              © {new Date().getFullYear()} Pia Pesa. All rights reserved.
+            </p>
+            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+              <span>Admin Panel</span>
+              <span>•</span>
+              <span>Secure</span>
+            </div>
+          </div>
+        </footer>
       </div>
     </div>
   )

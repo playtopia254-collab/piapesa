@@ -194,16 +194,34 @@ export async function PATCH(
             return NextResponse.json({ error: "Agent not found" }, { status: 404 })
           }
 
+          // Calculate commission (2% of withdrawal amount, minimum KES 10)
+          const commissionRate = 0.02 // 2% commission
+          const commission = Math.max(withdrawalRequest.amount * commissionRate, 10)
+          const totalAgentReceives = withdrawalRequest.amount + commission // Full amount + commission
+
+          console.log(`💰 Auto-complete Commission Calculation for Request ${withdrawalRequest._id}:`)
+          console.log(`   Withdrawal Amount: KES ${withdrawalRequest.amount}`)
+          console.log(`   Commission: KES ${commission}`)
+          console.log(`   Total Agent Receives: KES ${totalAgentReceives}`)
+
           // Deduct from user balance
           await usersCollection.updateOne(
             { _id: withdrawalRequest.userId },
             { $inc: { balance: -withdrawalRequest.amount } }
           )
 
-          // Add to agent balance
+          // Add to agent balance (WITH COMMISSION)
           await usersCollection.updateOne(
             { _id: withdrawalRequest.agentId },
-            { $inc: { balance: withdrawalRequest.amount } }
+            { 
+              $inc: { 
+                balance: totalAgentReceives, // Full amount + commission
+              },
+              $set: {
+                totalCommissionEarned: ((agentToCredit.totalCommissionEarned || 0) + commission),
+                updatedAt: new Date(),
+              }
+            }
           )
 
           // Create transaction records
@@ -238,6 +256,31 @@ export async function PATCH(
             createdAt: new Date(),
             completedAt: new Date(),
           })
+
+          // Create commission transaction record
+          try {
+            await transactionsCollection.insertOne({
+              userId: withdrawalRequest.agentId,
+              fromUserId: null, // System commission
+              toUserId: withdrawalRequest.agentId,
+              amount: commission,
+              type: "agent_commission",
+              network: "System",
+              purpose: `Commission earned from withdrawal transaction`,
+              status: "completed",
+              agentWithdrawalRequestId: withdrawalRequest._id,
+              customerId: withdrawalRequest.userId,
+              customerName: userToUpdate.name,
+              withdrawalAmount: withdrawalRequest.amount,
+              commissionRate: commissionRate,
+              createdAt: new Date(),
+              completedAt: new Date(),
+            })
+            console.log(`✅ Created commission transaction: KES ${commission}`)
+          } catch (commissionError) {
+            console.error(`❌ Failed to create commission transaction: ${commissionError}`)
+            // Balance was already updated, so continue
+          }
 
           updateData = {
             ...updateData,
@@ -282,16 +325,34 @@ export async function PATCH(
             return NextResponse.json({ error: "Agent not found" }, { status: 404 })
           }
 
+          // Calculate commission (2% of withdrawal amount, minimum KES 10)
+          const commissionRate = 0.02 // 2% commission
+          const commission = Math.max(withdrawalRequest.amount * commissionRate, 10)
+          const totalAgentReceives = withdrawalRequest.amount + commission // Full amount + commission
+
+          console.log(`💰 Auto-complete Commission Calculation for Request ${withdrawalRequest._id}:`)
+          console.log(`   Withdrawal Amount: KES ${withdrawalRequest.amount}`)
+          console.log(`   Commission: KES ${commission}`)
+          console.log(`   Total Agent Receives: KES ${totalAgentReceives}`)
+
           // Deduct from user balance
           await usersCollection.updateOne(
             { _id: withdrawalRequest.userId },
             { $inc: { balance: -withdrawalRequest.amount } }
           )
 
-          // Add to agent balance
+          // Add to agent balance (WITH COMMISSION)
           await usersCollection.updateOne(
             { _id: withdrawalRequest.agentId },
-            { $inc: { balance: withdrawalRequest.amount } }
+            { 
+              $inc: { 
+                balance: totalAgentReceives, // Full amount + commission
+              },
+              $set: {
+                totalCommissionEarned: ((agentToCredit.totalCommissionEarned || 0) + commission),
+                updatedAt: new Date(),
+              }
+            }
           )
 
           // Create transaction records
@@ -326,6 +387,31 @@ export async function PATCH(
             createdAt: new Date(),
             completedAt: new Date(),
           })
+
+          // Create commission transaction record
+          try {
+            await transactionsCollection.insertOne({
+              userId: withdrawalRequest.agentId,
+              fromUserId: null, // System commission
+              toUserId: withdrawalRequest.agentId,
+              amount: commission,
+              type: "agent_commission",
+              network: "System",
+              purpose: `Commission earned from withdrawal transaction`,
+              status: "completed",
+              agentWithdrawalRequestId: withdrawalRequest._id,
+              customerId: withdrawalRequest.userId,
+              customerName: userToUpdate.name,
+              withdrawalAmount: withdrawalRequest.amount,
+              commissionRate: commissionRate,
+              createdAt: new Date(),
+              completedAt: new Date(),
+            })
+            console.log(`✅ Created commission transaction: KES ${commission}`)
+          } catch (commissionError) {
+            console.error(`❌ Failed to create commission transaction: ${commissionError}`)
+            // Balance was already updated, so continue
+          }
 
           updateData = {
             ...updateData,
@@ -368,17 +454,44 @@ export async function PATCH(
           return NextResponse.json({ error: "Agent not found" }, { status: 404 })
         }
 
-        // Deduct from user balance (customer gives digital money)
+        // Calculate commission (2% of withdrawal amount, minimum KES 10)
+        const commissionRate = 0.02 // 2% commission
+        const commission = Math.max(withdrawalRequest.amount * commissionRate, 10)
+        const totalDeducted = withdrawalRequest.amount // Customer pays full amount
+        const totalAgentReceives = withdrawalRequest.amount + commission // Full amount + commission
+
+        console.log(`💰 Commission Calculation for Request ${withdrawalRequest._id}:`)
+        console.log(`   Withdrawal Amount: KES ${withdrawalRequest.amount}`)
+        console.log(`   Commission Rate: ${commissionRate * 100}%`)
+        console.log(`   Commission: KES ${commission}`)
+        console.log(`   Total Agent Receives: KES ${totalAgentReceives}`)
+        console.log(`   Agent Previous Balance: KES ${agentToCredit.balance || 0}`)
+
+        // Deduct from user balance (customer gives digital money - full amount)
         await usersCollection.updateOne(
           { _id: withdrawalRequest.userId },
-          { $inc: { balance: -withdrawalRequest.amount } }
+          { $inc: { balance: -totalDeducted } }
         )
 
-        // Add to agent balance (agent receives digital money for giving cash)
-        await usersCollection.updateOne(
+        // Add to agent balance (agent receives full withdrawal amount + commission)
+        // Agent gives customer cash, receives digital money + commission as earnings
+        const balanceUpdateResult = await usersCollection.updateOne(
           { _id: withdrawalRequest.agentId },
-          { $inc: { balance: withdrawalRequest.amount } }
+          { 
+            $inc: { 
+              balance: totalAgentReceives, // Full amount + commission
+            },
+            $set: {
+              totalCommissionEarned: ((agentToCredit.totalCommissionEarned || 0) + commission),
+              updatedAt: new Date(),
+            }
+          }
         )
+
+        // Verify the balance was updated
+        const updatedAgent = await usersCollection.findOne({ _id: withdrawalRequest.agentId })
+        console.log(`   Agent New Balance: KES ${updatedAgent?.balance || 0}`)
+        console.log(`   Balance Update Success: ${balanceUpdateResult.modifiedCount > 0}`)
 
         // Create transaction record for the customer (withdrawal - money out)
         await transactionsCollection.insertOne({
@@ -397,7 +510,7 @@ export async function PATCH(
           completedAt: new Date(),
         })
 
-        // Create transaction record for the agent (receive - money in)
+        // Create transaction record for the agent (receive - money in for cash exchange)
         await transactionsCollection.insertOne({
           userId: withdrawalRequest.agentId,
           fromUserId: withdrawalRequest.userId,
@@ -410,9 +523,91 @@ export async function PATCH(
           agentWithdrawalRequestId: withdrawalRequest._id,
           customerId: withdrawalRequest.userId,
           customerName: userToUpdate.name,
+          withdrawalAmount: withdrawalRequest.amount,
           createdAt: new Date(),
           completedAt: new Date(),
         })
+
+        // Create commission transaction record - CRITICAL: This must always succeed
+        try {
+          const commissionTransaction = {
+            userId: withdrawalRequest.agentId,
+            fromUserId: null, // System commission
+            toUserId: withdrawalRequest.agentId,
+            amount: commission,
+            type: "agent_commission",
+            network: "System",
+            purpose: `Commission earned from withdrawal transaction`,
+            status: "completed",
+            agentWithdrawalRequestId: withdrawalRequest._id,
+            customerId: withdrawalRequest.userId,
+            customerName: userToUpdate.name,
+            withdrawalAmount: withdrawalRequest.amount,
+            commissionRate: commissionRate,
+            createdAt: new Date(),
+            completedAt: new Date(),
+          }
+          
+          console.log(`💰 Creating commission transaction:`, {
+            agentId: withdrawalRequest.agentId.toString(),
+            amount: commission,
+            type: "agent_commission",
+            requestId: withdrawalRequest._id.toString(),
+          })
+          
+          const commissionResult = await transactionsCollection.insertOne(commissionTransaction)
+          
+          if (!commissionResult.insertedId) {
+            throw new Error("Commission transaction insertion returned no ID")
+          }
+          
+          console.log(`✅ Commission transaction created:`, {
+            insertedId: commissionResult.insertedId.toString(),
+            agentId: withdrawalRequest.agentId.toString(),
+            amount: commission,
+          })
+          
+          // CRITICAL: Verify the transaction was actually inserted - retry if needed
+          let verifyCommission = await transactionsCollection.findOne({
+            _id: commissionResult.insertedId,
+          })
+          
+          // If not found immediately, wait a bit and retry (MongoDB eventual consistency)
+          if (!verifyCommission) {
+            console.warn(`⚠️ Commission transaction not found immediately, retrying...`)
+            await new Promise(resolve => setTimeout(resolve, 100))
+            verifyCommission = await transactionsCollection.findOne({
+              _id: commissionResult.insertedId,
+            })
+          }
+          
+          if (!verifyCommission) {
+            // Last resort: try to find by request ID
+            verifyCommission = await transactionsCollection.findOne({
+              agentWithdrawalRequestId: withdrawalRequest._id,
+              type: "agent_commission",
+              userId: withdrawalRequest.agentId,
+            })
+          }
+          
+          if (!verifyCommission) {
+            const errorMsg = `CRITICAL ERROR: Commission transaction was not found after insertion! Request ID: ${withdrawalRequest._id}, Inserted ID: ${commissionResult.insertedId}`
+            console.error(`❌ ${errorMsg}`)
+            // Don't throw - balance was already updated, but log the error
+            // The fix-commission-transactions endpoint can recover this later
+          } else {
+            console.log(`✅ Verified commission transaction exists in database`)
+          }
+        } catch (commissionError) {
+          // CRITICAL: Log error but don't fail the entire transaction
+          // The balance was already updated, so we need to track this for recovery
+          const errorMsg = `Failed to create commission transaction: ${commissionError instanceof Error ? commissionError.message : String(commissionError)}`
+          console.error(`❌ ${errorMsg}`)
+          console.error(`   Request ID: ${withdrawalRequest._id}`)
+          console.error(`   Agent ID: ${withdrawalRequest.agentId}`)
+          console.error(`   Commission Amount: KES ${commission}`)
+          // Note: Balance was already updated with commission, so the fix endpoint can create the missing transaction record
+        }
 
         updateData = {
           ...updateData,
@@ -505,6 +700,96 @@ export async function PATCH(
       _id: new ObjectId(requestId),
     })
 
+    // Create notifications based on action
+    const notificationsCollection = db.collection("notifications")
+    
+    if (updatedRequest) {
+      // Get user and agent details for notifications
+      const userForNotification = await usersCollection.findOne({ _id: updatedRequest.userId })
+      const agentForNotification = updatedRequest.agentId 
+        ? await usersCollection.findOne({ _id: updatedRequest.agentId })
+        : null
+
+      switch (action) {
+        case "accept":
+          // Notify user that agent accepted their request
+          if (userForNotification && agentForNotification) {
+            await notificationsCollection.insertOne({
+              userId: updatedRequest.userId,
+              type: "agent_request",
+              title: "Agent Accepted Your Request",
+              message: `${agentForNotification.name} has accepted your withdrawal request of KES ${updatedRequest.amount.toLocaleString()}. They will be on their way soon.`,
+              read: false,
+              link: `/dashboard/agent-requests`,
+              metadata: {
+                requestId: requestId,
+                amount: updatedRequest.amount,
+                status: "matched",
+              },
+              createdAt: new Date(),
+            })
+          }
+          break
+
+        case "agent_arrived":
+          // Notify user that agent has arrived
+          if (userForNotification && agentForNotification) {
+            await notificationsCollection.insertOne({
+              userId: updatedRequest.userId,
+              type: "agent_request",
+              title: "Agent Has Arrived",
+              message: `${agentForNotification.name} has arrived at your location. Please meet them to complete your withdrawal.`,
+              read: false,
+              link: `/dashboard/agent-requests`,
+              metadata: {
+                requestId: requestId,
+                amount: updatedRequest.amount,
+                status: "in_progress",
+              },
+              createdAt: new Date(),
+            })
+          }
+          break
+
+        case "complete":
+          // Notify both user and agent about completion
+          if (userForNotification) {
+            await notificationsCollection.insertOne({
+              userId: updatedRequest.userId,
+              type: "transaction",
+              title: "Withdrawal Completed",
+              message: `Your withdrawal of KES ${updatedRequest.amount.toLocaleString()} has been completed successfully.`,
+              read: false,
+              link: `/dashboard/transactions`,
+              metadata: {
+                requestId: requestId,
+                amount: updatedRequest.amount,
+                status: "completed",
+              },
+              createdAt: new Date(),
+            })
+          }
+          if (agentForNotification) {
+            const commission = Math.max(updatedRequest.amount * 0.02, 10)
+            await notificationsCollection.insertOne({
+              userId: updatedRequest.agentId,
+              type: "transaction",
+              title: "Withdrawal Transaction Completed",
+              message: `You've completed a withdrawal transaction of KES ${updatedRequest.amount.toLocaleString()}. Commission: KES ${commission.toLocaleString()}.`,
+              read: false,
+              link: `/dashboard/agent-dashboard`,
+              metadata: {
+                requestId: requestId,
+                amount: updatedRequest.amount,
+                status: "completed",
+              },
+              createdAt: new Date(),
+            })
+          }
+          break
+      }
+    }
+
     // Get user and agent details
     let userData = null
     let agentData = null
@@ -536,6 +821,17 @@ export async function PATCH(
       }
     }
 
+    // Get agent balance for "complete" action - fetch AFTER balance update to get accurate balance
+    let agentBalance = null
+    if (action === "complete" && updatedRequest?.agentId) {
+      const agentUser = await usersCollection.findOne({ _id: updatedRequest.agentId })
+      agentBalance = agentUser?.balance || 0
+      // Update agentData with the latest balance if it exists
+      if (agentData && agentUser) {
+        agentData.balance = agentUser.balance
+      }
+    }
+
     return NextResponse.json({
       success: true,
       message,
@@ -558,7 +854,11 @@ export async function PATCH(
         disputeReason: updatedRequest?.disputeReason,
       },
       userBalance: userData?.balance,
-      agentBalance: agentData?.balance,
+      agentBalance: agentBalance !== null ? agentBalance : (agentData?.balance || 0), // Use post-update balance
+      ...(action === "complete" && updatedRequest?.amount && {
+        commission: Math.max(updatedRequest.amount * 0.02, 10),
+        commissionRate: 0.02,
+      }),
     })
   } catch (error) {
     console.error("Update withdrawal request error:", error)

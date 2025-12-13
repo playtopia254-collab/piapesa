@@ -369,7 +369,7 @@ export default function WithdrawPage() {
   // Success/Matched step
   if (step === 4) {
     return (
-      <div className="max-w-md mx-auto space-y-6">
+      <div className="max-w-md mx-auto space-y-6 px-4 sm:px-0 pb-6">
         <div className="text-center">
           <Link
             href="/dashboard"
@@ -381,17 +381,17 @@ export default function WithdrawPage() {
         </div>
 
         <Card>
-          <CardHeader className="text-center">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle className="w-8 h-8 text-green-600" />
+          <CardHeader className="text-center px-4 sm:px-6">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="w-8 h-8 sm:w-10 sm:h-10 text-green-600" />
             </div>
-            <CardTitle className={
+            <CardTitle className={`text-lg sm:text-xl ${
               withdrawalRequest?.status === "completed"
                 ? "text-green-600"
                 : withdrawalRequest?.status === "cancelled"
                   ? "text-red-600"
                   : "text-yellow-600"
-            }>
+            }`}>
               {withdrawalMethod === "Via Agent" 
                 ? "Agent Matched!" 
                 : withdrawalRequest?.status === "completed"
@@ -400,7 +400,7 @@ export default function WithdrawPage() {
                     ? "Withdrawal Failed"
                     : "Withdrawal Requested!"}
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-xs sm:text-sm">
               {withdrawalMethod === "Via Agent"
                 ? "You've been matched with a nearby agent"
                 : withdrawalRequest?.status === "completed"
@@ -410,80 +410,68 @@ export default function WithdrawPage() {
                 : "Your withdrawal request is being processed"}
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="bg-muted/50 p-4 rounded-lg space-y-3">
+          <CardContent className="space-y-4 px-4 sm:px-6 pb-6">
+            <div className="bg-muted/50 p-3 sm:p-4 rounded-lg space-y-2.5 sm:space-y-3">
               {withdrawalRequest && (
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Transaction ID</span>
-                  <span className="text-sm font-mono">{withdrawalRequest.id}</span>
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                  <span className="text-xs sm:text-sm text-muted-foreground">Transaction ID</span>
+                  <span className="text-xs sm:text-sm font-mono break-all">{withdrawalRequest.id}</span>
                 </div>
               )}
               {(withdrawalDetails?.sasapay_transaction_code || withdrawalDetails?.sasapayTransactionCode) && (
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">SasaPay Code</span>
-                  <span className="text-sm font-mono font-semibold">{withdrawalDetails.sasapay_transaction_code || withdrawalDetails.sasapayTransactionCode}</span>
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                  <span className="text-xs sm:text-sm text-muted-foreground">SasaPay Code</span>
+                  <span className="text-xs sm:text-sm font-mono font-semibold break-all">{withdrawalDetails.sasapay_transaction_code || withdrawalDetails.sasapayTransactionCode}</span>
                 </div>
               )}
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Amount</span>
-                <span className="text-sm font-semibold">
+              <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                <span className="text-xs sm:text-sm text-muted-foreground">Amount</span>
+                <span className="text-sm sm:text-base font-semibold">
                   <CurrencyFormatter amount={Number.parseFloat(amount)} />
                 </span>
               </div>
               {withdrawalDetails?.transactionFee && (
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Transaction Fee</span>
-                  <span className="text-sm">
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                  <span className="text-xs sm:text-sm text-muted-foreground">Transaction Fee</span>
+                  <span className="text-xs sm:text-sm">
                     <CurrencyFormatter amount={withdrawalDetails.transactionFee} />
                   </span>
                 </div>
               )}
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Method</span>
-                <span className="text-sm font-medium">{withdrawalMethod}</span>
+              <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                <span className="text-xs sm:text-sm text-muted-foreground">Method</span>
+                <span className="text-xs sm:text-sm font-medium">{withdrawalMethod}</span>
               </div>
               {withdrawalDetails?.recipient_name && (
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Recipient</span>
-                  <span className="text-sm font-medium">{withdrawalDetails.recipient_name}</span>
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                  <span className="text-xs sm:text-sm text-muted-foreground">Recipient</span>
+                  <span className="text-xs sm:text-sm font-medium break-words">{withdrawalDetails.recipient_name}</span>
                 </div>
               )}
               {withdrawalRequest?.createdAt && (
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Requested At</span>
-                  <span className="text-sm">{new Date(withdrawalRequest.createdAt).toLocaleString()}</span>
-                </div>
-              )}
-              {withdrawalDetails?.sasapayTransactionCode && (
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">SasaPay Code</span>
-                  <span className="text-sm font-mono">{withdrawalDetails.sasapayTransactionCode}</span>
-                </div>
-              )}
-              {withdrawalRequest?.createdAt && (
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Date</span>
-                  <span className="text-sm">{new Date(withdrawalRequest.createdAt).toLocaleString()}</span>
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                  <span className="text-xs sm:text-sm text-muted-foreground">Requested At</span>
+                  <span className="text-xs sm:text-sm break-words">{new Date(withdrawalRequest.createdAt).toLocaleString()}</span>
                 </div>
               )}
               {withdrawalDetails?.result_desc && (
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Result</span>
-                  <span className="text-sm">{withdrawalDetails.result_desc}</span>
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                  <span className="text-xs sm:text-sm text-muted-foreground">Result</span>
+                  <span className="text-xs sm:text-sm break-words">{withdrawalDetails.result_desc}</span>
                 </div>
               )}
               {withdrawalRequest && (
-                <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Status</span>
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0 items-start sm:items-center">
+                  <span className="text-xs sm:text-sm text-muted-foreground">Status</span>
                   <Badge
                     variant="secondary"
-                    className={
+                    className={`text-xs ${
                       withdrawalRequest.status === "completed"
                         ? "bg-green-100 text-green-700"
                         : withdrawalRequest.status === "cancelled"
                           ? "bg-red-100 text-red-700"
                           : "bg-yellow-100 text-yellow-700"
-                    }
+                    }`}
                   >
                     {withdrawalRequest.status === "completed" && <CheckCircle className="w-3 h-3 mr-1" />}
                     {withdrawalRequest.status === "cancelled" && <AlertCircle className="w-3 h-3 mr-1" />}
@@ -495,27 +483,27 @@ export default function WithdrawPage() {
               {matchedAgent && (
                 <>
                   <div className="border-t pt-3 mt-3">
-                    <h4 className="font-medium mb-2">Agent Details</h4>
+                    <h4 className="font-medium mb-2 text-sm sm:text-base">Agent Details</h4>
                     <div className="space-y-2">
-                      <div className="flex justify-between">
-                        <span className="text-sm text-muted-foreground">Name</span>
-                        <span className="text-sm font-medium">{matchedAgent.name}</span>
+                      <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                        <span className="text-xs sm:text-sm text-muted-foreground">Name</span>
+                        <span className="text-xs sm:text-sm font-medium break-words">{matchedAgent.name}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm text-muted-foreground">Phone</span>
-                        <span className="text-sm">
+                      <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                        <span className="text-xs sm:text-sm text-muted-foreground">Phone</span>
+                        <span className="text-xs sm:text-sm break-words">
                           <PhoneFormatter phone={matchedAgent.phone} />
                         </span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm text-muted-foreground">Location</span>
-                        <span className="text-sm">{matchedAgent.location}</span>
+                      <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                        <span className="text-xs sm:text-sm text-muted-foreground">Location</span>
+                        <span className="text-xs sm:text-sm break-words">{matchedAgent.location}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm text-muted-foreground">Rating</span>
+                      <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                        <span className="text-xs sm:text-sm text-muted-foreground">Rating</span>
                         <div className="flex items-center space-x-1">
                           <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
-                          <span className="text-sm">{matchedAgent.rating}</span>
+                          <span className="text-xs sm:text-sm">{matchedAgent.rating}</span>
                         </div>
                       </div>
                     </div>
@@ -526,20 +514,20 @@ export default function WithdrawPage() {
 
             {matchedAgent ? (
               <div className="space-y-3">
-                <Alert>
+                <Alert className="text-xs sm:text-sm">
                   <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
+                  <AlertDescription className="text-xs sm:text-sm">
                     Contact the agent to arrange collection. Once you've collected your cash, mark as completed below.
                   </AlertDescription>
                 </Alert>
-                <div className="grid grid-cols-2 gap-3">
-                  <Button variant="outline" asChild>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Button variant="outline" asChild className="w-full">
                     <a href={`tel:${matchedAgent.phone}`}>
                       <Phone className="w-4 h-4 mr-2" />
                       Call Agent
                     </a>
                   </Button>
-                  <Button onClick={handleCollected}>
+                  <Button onClick={handleCollected} className="w-full">
                     <CheckCircle className="w-4 h-4 mr-2" />
                     Collected
                   </Button>
@@ -547,9 +535,9 @@ export default function WithdrawPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                <Alert>
+                <Alert className="text-xs sm:text-sm">
                   <Clock className="h-4 w-4" />
-                  <AlertDescription>
+                  <AlertDescription className="text-xs sm:text-sm">
                     Your withdrawal request is being processed. You'll receive a notification once it's complete.
                   </AlertDescription>
                 </Alert>
@@ -567,7 +555,7 @@ export default function WithdrawPage() {
   // Agent matching step
   if (step === 3) {
     return (
-      <div className="max-w-2xl mx-auto space-y-6">
+      <div className="max-w-2xl mx-auto space-y-6 px-4 sm:px-0 pb-6">
         <div className="text-center">
           <Button
             variant="ghost"
@@ -577,59 +565,65 @@ export default function WithdrawPage() {
             <ArrowLeft className="w-4 h-4 mr-1" />
             Back
           </Button>
-          <h1 className="text-2xl font-bold">Choose an Agent</h1>
-          <p className="text-muted-foreground">Select a nearby agent to collect your cash</p>
+          <h1 className="text-xl sm:text-2xl font-bold">Choose an Agent</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">Select a nearby agent to collect your cash</p>
         </div>
 
         {error && (
-          <Alert variant="destructive">
+          <Alert variant="destructive" className="text-xs sm:text-sm">
             <AlertCircle className="h-4 w-4" />
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription className="text-xs sm:text-sm">{error}</AlertDescription>
           </Alert>
         )}
 
         <Card>
-          <CardHeader>
-            <CardTitle>Available Agents</CardTitle>
-            <CardDescription>
+          <CardHeader className="px-4 sm:px-6">
+            <CardTitle className="text-base sm:text-lg">Available Agents</CardTitle>
+            <CardDescription className="text-xs sm:text-sm">
               Withdrawing <CurrencyFormatter amount={Number.parseFloat(amount)} className="font-semibold" /> via agent
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-4 sm:px-6">
             {agents.length === 0 ? (
               <div className="text-center py-8">
                 <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
                   <Users className="w-6 h-6 text-muted-foreground" />
                 </div>
-                <p className="text-muted-foreground">No agents available in your area</p>
-                <p className="text-sm text-muted-foreground">Try again later or choose a different withdrawal method</p>
+                <p className="text-sm sm:text-base text-muted-foreground">No agents available in your area</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">Try again later or choose a different withdrawal method</p>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 {agents.map((agent) => (
                   <div
                     key={agent.id}
-                    className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors"
+                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 p-3 sm:p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors"
                   >
-                    <div className="flex items-center space-x-4">
-                      <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
-                        <Users className="w-6 h-6 text-primary" />
+                    <div className="flex items-start sm:items-center space-x-3 sm:space-x-4 flex-1 min-w-0">
+                      <div className="w-10 h-10 sm:w-12 sm:h-12 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
+                        <Users className="w-5 h-5 sm:w-6 sm:h-6 text-primary" />
                       </div>
-                      <div>
-                        <h3 className="font-medium">{agent.name}</h3>
-                        <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                          <MapPin className="w-3 h-3" />
-                          <span>{agent.location}</span>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-medium text-sm sm:text-base truncate">{agent.name}</h3>
+                        <div className="flex items-center space-x-2 text-xs sm:text-sm text-muted-foreground mt-1">
+                          <MapPin className="w-3 h-3 flex-shrink-0" />
+                          <span className="truncate">{agent.location}</span>
                         </div>
-                        <div className="flex items-center space-x-4 text-sm text-muted-foreground mt-1">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm text-muted-foreground mt-1">
                           <div className="flex items-center space-x-1">
                             <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
                             <span>{agent.rating}</span>
                           </div>
                           <span>•</span>
                           <span>{agent.totalTransactions} transactions</span>
+                          {agent.totalReviews !== undefined && agent.totalReviews > 0 && (
+                            <>
+                              <span>•</span>
+                              <span>{agent.totalReviews} {agent.totalReviews === 1 ? "review" : "reviews"}</span>
+                            </>
+                          )}
                         </div>
-                        <div className="flex items-center space-x-2 mt-1">
+                        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mt-1.5">
                           {agent.availableNetworks.map((network) => (
                             <Badge key={network} variant="outline" className="text-xs">
                               {network}
@@ -638,14 +632,15 @@ export default function WithdrawPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm text-muted-foreground mb-2">
+                    <div className="flex sm:flex-col sm:text-right sm:items-end gap-2 sm:gap-2 flex-shrink-0">
+                      <p className="text-xs sm:text-sm text-muted-foreground sm:mb-2">
                         Max: <CurrencyFormatter amount={agent.maxAmount} />
                       </p>
                       <Button
                         onClick={() => handleAgentMatch(agent)}
                         disabled={isLoading || Number.parseFloat(amount) > agent.maxAmount}
                         size="sm"
+                        className="w-full sm:w-auto"
                       >
                         {isLoading && matchedAgent?.id === agent.id ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
@@ -667,7 +662,7 @@ export default function WithdrawPage() {
   // Amount input step
   if (step === 2) {
     return (
-      <div className="max-w-md mx-auto space-y-6">
+      <div className="max-w-md mx-auto space-y-6 px-4 sm:px-0 pb-6">
         <div className="text-center">
           <Button
             variant="ghost"
@@ -677,25 +672,25 @@ export default function WithdrawPage() {
             <ArrowLeft className="w-4 h-4 mr-1" />
             Back
           </Button>
-          <h1 className="text-2xl font-bold">Enter Amount</h1>
-          <p className="text-muted-foreground">How much would you like to withdraw?</p>
+          <h1 className="text-xl sm:text-2xl font-bold">Enter Amount</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">How much would you like to withdraw?</p>
         </div>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <Download className="w-5 h-5 text-primary" />
+          <CardHeader className="px-4 sm:px-6">
+            <CardTitle className="flex items-center space-x-2 text-base sm:text-lg">
+              <Download className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
               <span>Withdrawal via {withdrawalMethod}</span>
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-xs sm:text-sm">
               Available Balance: <CurrencyFormatter amount={user.balance} className="font-semibold text-primary" />
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-4 sm:px-6 pb-6">
             {error && (
-              <Alert variant="destructive" className="mb-4">
+              <Alert variant="destructive" className="mb-4 text-xs sm:text-sm">
                 <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
+                <AlertDescription className="text-xs sm:text-sm">{error}</AlertDescription>
               </Alert>
             )}
 
@@ -703,22 +698,23 @@ export default function WithdrawPage() {
               {withdrawalMethod === "Mobile Money" && (
                 <>
                   <div className="space-y-2">
-                    <Label htmlFor="phoneNumber">Mobile Money Phone Number</Label>
+                    <Label htmlFor="phoneNumber" className="text-sm">Mobile Money Phone Number</Label>
                     <Input
                       id="phoneNumber"
                       type="tel"
                       placeholder={`${user.phone?.replace("+254", "0") || "0712345678"} or enter different number`}
                       value={phoneNumber}
                       onChange={(e) => setPhoneNumber(e.target.value)}
+                      className="text-base"
                     />
                     <p className="text-xs text-muted-foreground">
                       Enter the phone number to receive the money. Leave empty to use your account number ({user.phone?.replace("+254", "0")}).
                     </p>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="network">Network *</Label>
+                    <Label htmlFor="network" className="text-sm">Network *</Label>
                     <Select value={network} onValueChange={setNetwork}>
-                      <SelectTrigger>
+                      <SelectTrigger className="text-base">
                         <SelectValue placeholder="Select network" />
                       </SelectTrigger>
                       <SelectContent>
@@ -746,7 +742,7 @@ export default function WithdrawPage() {
                 </>
               )}
               <div className="space-y-2">
-                <Label htmlFor="amount">Amount (KES) *</Label>
+                <Label htmlFor="amount" className="text-sm">Amount (KES) *</Label>
                 <Input
                   id="amount"
                   type="number"
@@ -757,20 +753,22 @@ export default function WithdrawPage() {
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   required
+                  className="text-base"
                 />
                 <p className="text-xs text-muted-foreground">Minimum: KES 1 | Maximum: KES 250,000</p>
               </div>
 
               {withdrawalMethod === "Mobile Money" && (
                 <div className="space-y-2">
-                  <Label htmlFor="reason">Reason *</Label>
+                  <Label htmlFor="reason" className="text-sm">Reason *</Label>
                   <Textarea
                     id="reason"
                     placeholder="e.g., Personal use, Business payment, etc."
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
-                    rows={2}
+                    rows={3}
                     required
+                    className="text-base resize-none"
                   />
                   <p className="text-xs text-muted-foreground">Please provide a reason for this withdrawal</p>
                 </div>
@@ -785,13 +783,14 @@ export default function WithdrawPage() {
                     size="sm"
                     onClick={() => setAmount(quickAmount.toString())}
                     disabled={quickAmount > user.balance}
+                    className="text-xs sm:text-sm"
                   >
                     <CurrencyFormatter amount={quickAmount} />
                   </Button>
                 ))}
               </div>
 
-              <Button type="submit" disabled={isLoading} className="w-full">
+              <Button type="submit" disabled={isLoading} className="w-full text-base" size="lg">
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {withdrawalMethod === "Via Agent" ? "Find Agents" : "Withdraw to Mobile Money"}
               </Button>
@@ -825,7 +824,7 @@ export default function WithdrawPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-2xl mx-auto space-y-6 px-4 sm:px-0 pb-6">
       <div className="text-center">
         <Link
           href="/dashboard"
@@ -834,41 +833,61 @@ export default function WithdrawPage() {
           <ArrowLeft className="w-4 h-4 mr-1" />
           Back to Dashboard
         </Link>
-        <h1 className="text-2xl font-bold">Withdraw Money</h1>
-        <p className="text-muted-foreground">Choose how you'd like to access your cash</p>
+        <h1 className="text-xl sm:text-2xl font-bold">Withdraw Money</h1>
+        <p className="text-sm sm:text-base text-muted-foreground">Choose how you'd like to access your cash</p>
       </div>
 
-      {/* Show active withdrawal request if exists */}
-      {activeRequest && (
+      {/* Show AgentWithdrawalFlow if there's an active matched/in_progress request */}
+      {activeRequest && (activeRequest.status === "matched" || activeRequest.status === "in_progress") && user ? (
+        <div className="max-w-4xl mx-auto -mx-4 sm:mx-auto sm:px-0">
+          <AgentWithdrawalFlow
+            user={{
+              id: user.id,
+              name: user.name,
+              phone: user.phone,
+              balance: user.balance,
+              location: user.location,
+            }}
+            onComplete={() => {
+              setActiveRequest(null)
+              router.push("/dashboard")
+            }}
+            onCancel={() => {
+              setActiveRequest(null)
+            }}
+          />
+        </div>
+      ) : activeRequest ? (
+        /* Show active withdrawal request card if pending */
         <Card className="border-orange-500 bg-orange-50 dark:bg-orange-950">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-orange-700 dark:text-orange-300">
-              <Clock className="h-5 w-5" />
+          <CardHeader className="px-4 sm:px-6">
+            <CardTitle className="flex items-center gap-2 text-orange-700 dark:text-orange-300 text-base sm:text-lg">
+              <Clock className="h-4 w-4 sm:h-5 sm:w-5" />
               Active Withdrawal Request
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-xs sm:text-sm">
               You have an active withdrawal request. Cancel it to create a new one.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-4 space-y-2">
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Amount</span>
-                <span className="font-semibold">
+          <CardContent className="space-y-4 px-4 sm:px-6 pb-6">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-3 sm:p-4 space-y-2">
+              <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                <span className="text-xs sm:text-sm text-muted-foreground">Amount</span>
+                <span className="text-sm sm:text-base font-semibold">
                   <CurrencyFormatter amount={activeRequest.amount} />
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Status</span>
+              <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0 items-start sm:items-center">
+                <span className="text-xs sm:text-sm text-muted-foreground">Status</span>
                 <Badge
                   variant="outline"
-                  className={
+                  className={`text-xs ${
                     activeRequest.status === "pending"
                       ? "bg-yellow-100 text-yellow-700"
                       : activeRequest.status === "matched"
                         ? "bg-blue-100 text-blue-700"
                         : "bg-orange-100 text-orange-700"
-                  }
+                  }`}
                 >
                   {activeRequest.status === "pending"
                     ? "Pending"
@@ -877,13 +896,13 @@ export default function WithdrawPage() {
                       : "In Progress"}
                 </Badge>
               </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Location</span>
-                <span className="text-sm">{activeRequest.location}</span>
+              <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                <span className="text-xs sm:text-sm text-muted-foreground">Location</span>
+                <span className="text-xs sm:text-sm break-words">{activeRequest.location}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-muted-foreground">Created</span>
-                <span className="text-sm">
+              <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
+                <span className="text-xs sm:text-sm text-muted-foreground">Created</span>
+                <span className="text-xs sm:text-sm break-words">
                   {new Date(activeRequest.createdAt).toLocaleString()}
                 </span>
               </div>
@@ -903,39 +922,39 @@ export default function WithdrawPage() {
             </Button>
           </CardContent>
         </Card>
-      )}
+      ) : null}
 
       {error && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="text-xs sm:text-sm">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription className="text-xs sm:text-sm">{error}</AlertDescription>
         </Alert>
       )}
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         <Card
           className="hover:shadow-md transition-shadow cursor-pointer border-2 border-transparent hover:border-primary"
           onClick={() => setShowAgentFlow(true)}
         >
-          <CardHeader className="text-center">
-            <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-4">
+          <CardHeader className="text-center px-4 sm:px-6 pb-3">
+            <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-3 sm:mb-4">
               <Users className="w-6 h-6 text-primary" />
             </div>
-            <CardTitle className="text-lg">Via Agent</CardTitle>
-            <CardDescription>Get matched with nearby agents for instant cash pickup</CardDescription>
+            <CardTitle className="text-base sm:text-lg">Via Agent</CardTitle>
+            <CardDescription className="text-xs sm:text-sm">Get matched with nearby agents for instant cash pickup</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-2 text-sm text-muted-foreground">
+          <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
+            <div className="space-y-2 text-xs sm:text-sm text-muted-foreground">
               <div className="flex items-center space-x-2">
-                <CheckCircle className="w-4 h-4 text-green-500" />
+                <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 flex-shrink-0" />
                 <span>Uber-like matching</span>
               </div>
               <div className="flex items-center space-x-2">
-                <CheckCircle className="w-4 h-4 text-green-500" />
+                <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 flex-shrink-0" />
                 <span>Available 24/7</span>
               </div>
               <div className="flex items-center space-x-2">
-                <CheckCircle className="w-4 h-4 text-green-500" />
+                <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 flex-shrink-0" />
                 <span>No fees</span>
               </div>
             </div>
@@ -946,25 +965,25 @@ export default function WithdrawPage() {
           className="hover:shadow-md transition-shadow cursor-pointer"
           onClick={() => handleMethodSelect("Bank Deposit")}
         >
-          <CardHeader className="text-center">
-            <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-4">
+          <CardHeader className="text-center px-4 sm:px-6 pb-3">
+            <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-3 sm:mb-4">
               <Building className="w-6 h-6 text-primary" />
             </div>
-            <CardTitle className="text-lg">Bank Deposit</CardTitle>
-            <CardDescription>Transfer directly to your bank account</CardDescription>
+            <CardTitle className="text-base sm:text-lg">Bank Deposit</CardTitle>
+            <CardDescription className="text-xs sm:text-sm">Transfer directly to your bank account</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-2 text-sm text-muted-foreground">
+          <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
+            <div className="space-y-2 text-xs sm:text-sm text-muted-foreground">
               <div className="flex items-center space-x-2">
-                <CheckCircle className="w-4 h-4 text-green-500" />
+                <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 flex-shrink-0" />
                 <span>Secure transfer</span>
               </div>
               <div className="flex items-center space-x-2">
-                <Clock className="w-4 h-4 text-yellow-500" />
+                <Clock className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-500 flex-shrink-0" />
                 <span>1-2 business days</span>
               </div>
               <div className="flex items-center space-x-2">
-                <CheckCircle className="w-4 h-4 text-green-500" />
+                <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 flex-shrink-0" />
                 <span>Low fees</span>
               </div>
             </div>
@@ -972,28 +991,28 @@ export default function WithdrawPage() {
         </Card>
 
         <Card
-          className="hover:shadow-md transition-shadow cursor-pointer"
+          className="hover:shadow-md transition-shadow cursor-pointer sm:col-span-2 lg:col-span-1"
           onClick={() => handleMethodSelect("Mobile Money")}
         >
-          <CardHeader className="text-center">
-            <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-4">
+          <CardHeader className="text-center px-4 sm:px-6 pb-3">
+            <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mx-auto mb-3 sm:mb-4">
               <Smartphone className="w-6 h-6 text-primary" />
             </div>
-            <CardTitle className="text-lg">Mobile Money</CardTitle>
-            <CardDescription>Send to M-Pesa, Airtel Money, or other mobile wallets</CardDescription>
+            <CardTitle className="text-base sm:text-lg">Mobile Money</CardTitle>
+            <CardDescription className="text-xs sm:text-sm">Send to M-Pesa, Airtel Money, or other mobile wallets</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-2 text-sm text-muted-foreground">
+          <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
+            <div className="space-y-2 text-xs sm:text-sm text-muted-foreground">
               <div className="flex items-center space-x-2">
-                <CheckCircle className="w-4 h-4 text-green-500" />
+                <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 flex-shrink-0" />
                 <span>Instant transfer</span>
               </div>
               <div className="flex items-center space-x-2">
-                <CheckCircle className="w-4 h-4 text-green-500" />
+                <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 flex-shrink-0" />
                 <span>All networks</span>
               </div>
               <div className="flex items-center space-x-2">
-                <CheckCircle className="w-4 h-4 text-green-500" />
+                <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 flex-shrink-0" />
                 <span>Standard fees</span>
               </div>
             </div>
@@ -1002,14 +1021,14 @@ export default function WithdrawPage() {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Your Balance</CardTitle>
+        <CardHeader className="px-4 sm:px-6">
+          <CardTitle className="text-base sm:text-lg">Your Balance</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="text-3xl font-bold text-primary mb-2">
+        <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
+          <div className="text-2xl sm:text-3xl font-bold text-primary mb-2">
             <CurrencyFormatter amount={user.balance} />
           </div>
-          <p className="text-sm text-muted-foreground">Available for withdrawal</p>
+          <p className="text-xs sm:text-sm text-muted-foreground">Available for withdrawal</p>
         </CardContent>
       </Card>
     </div>

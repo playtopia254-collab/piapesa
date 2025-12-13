@@ -83,6 +83,35 @@ export async function GET(request: NextRequest) {
         else if (txn.type === "agent_receive" && (txnUserId === userId || isReceiver)) {
           calculatedBalance += txn.amount
         }
+        // Agent commission - agent earns commission (money in for agent)
+        else if (txn.type === "agent_commission" && (txnUserId === userId || isReceiver)) {
+          calculatedBalance += txn.amount
+          // Debug logging for commission transactions
+          if (user.isAgent) {
+            console.log(`💰 Adding commission to balance: KES ${txn.amount} (Total: KES ${calculatedBalance})`)
+          }
+        }
+      }
+
+      // Debug: Log commission totals for agents
+      if (user.isAgent) {
+        const commissionTxns = allTransactions.filter(
+          (txn) => txn.type === "agent_commission" && 
+          (txn.userId?.toString() === userId || txn.toUserId?.toString() === userId) &&
+          txn.status === "completed"
+        )
+        const totalCommission = commissionTxns.reduce((sum, txn) => sum + (txn.amount || 0), 0)
+        const receiveTxns = allTransactions.filter(
+          (txn) => txn.type === "agent_receive" && 
+          (txn.userId?.toString() === userId || txn.toUserId?.toString() === userId) &&
+          txn.status === "completed"
+        )
+        const totalReceived = receiveTxns.reduce((sum, txn) => sum + (txn.amount || 0), 0)
+        console.log(`📊 Agent Balance Breakdown for ${userId}:`)
+        console.log(`   Commission transactions: ${commissionTxns.length}, Total: KES ${totalCommission}`)
+        console.log(`   Receive transactions: ${receiveTxns.length}, Total: KES ${totalReceived}`)
+        console.log(`   Calculated Balance: KES ${calculatedBalance}`)
+        console.log(`   Stored Balance: KES ${balance}`)
       }
 
       // Always use calculated balance to ensure accuracy

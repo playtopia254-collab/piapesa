@@ -28,6 +28,8 @@ export async function GET(request: NextRequest) {
 
     const db = await getDb()
     const usersCollection = db.collection("users")
+    const reviewsCollection = db.collection("agent_reviews")
+    const transactionsCollection = db.collection("transactions")
 
     // If requestId provided, verify it exists (optional)
     if (requestId) {
@@ -61,11 +63,10 @@ export async function GET(request: NextRequest) {
       .toArray()
     console.log(`Available agents: ${availableAgents.length}`)
 
-    // Find all available agents with exact GPS coordinates
+    // Find ALL agents (both available and offline) with exact GPS coordinates
     const agents = await usersCollection
       .find({
         isAgent: true,
-        isAvailable: true,
         $or: [
           { 
             lastKnownLocation: { $exists: true, $ne: null },
@@ -81,11 +82,12 @@ export async function GET(request: NextRequest) {
       })
       .toArray()
 
-    console.log(`Found ${agents.length} available agents with GPS coordinates`)
+    console.log(`Found ${agents.length} agents with GPS coordinates`)
     
     // Log details of each agent found
     agents.forEach((agent) => {
       console.log(`  - Agent ${agent._id} (${agent.name}):`, {
+        isAvailable: agent.isAvailable || false,
         hasLastKnownLocation: !!agent.lastKnownLocation,
         hasLocation: !!agent.location,
         lastKnownLocation: agent.lastKnownLocation,
@@ -125,24 +127,59 @@ export async function GET(request: NextRequest) {
           lastKnownLocation: agent.lastKnownLocation, // Include for tracking
           rating: agent.rating || 5.0,
           totalTransactions: agent.totalTransactions || 0,
+          isAvailable: agent.isAvailable === true, // Only true if explicitly set to true (agent pressed "Go Online")
           distance,
           distanceFormatted: formatDistance(distance),
+          agentId: agent._id, // Store for review count lookup
         }
       })
       .filter((agent) => agent !== null)
-      .sort((a, b) => a!.distance - b!.distance) // Sort by distance (closest first)
+      .sort((a, b) => {
+        // First sort by availability (available first), then by distance
+        if (a!.isAvailable !== b!.isAvailable) {
+          return a!.isAvailable ? -1 : 1
+        }
+        return a!.distance - b!.distance
+      })
 
-    console.log(`✅ Returning ${agentsWithDistance.length} agents within ${maxDistance}km`)
+    // Get review counts and transaction counts for each agent
+    const agentsWithReviews = await Promise.all(
+      agentsWithDistance.map(async (agent) => {
+        if (!agent) return null
+        
+        // Get review count
+        const reviewCount = await reviewsCollection.countDocuments({
+          agentId: new ObjectId(agent.agentId),
+        })
+        
+        // Get actual transaction count from completed agent_receive transactions
+        const transactionCount = await transactionsCollection.countDocuments({
+          userId: new ObjectId(agent.agentId),
+          type: "agent_receive",
+          status: "completed",
+        })
+        
+        return {
+          ...agent,
+          totalTransactions: transactionCount, // Use actual count from transactions collection
+          totalReviews: reviewCount,
+        }
+      })
+    )
+
+    const finalAgents = agentsWithReviews.filter((agent) => agent !== null)
+
+    console.log(`✅ Returning ${finalAgents.length} agents within ${maxDistance}km`)
     console.log("=".repeat(80))
 
     return NextResponse.json({
       success: true,
-      agents: agentsWithDistance,
+      agents: finalAgents,
       userLocation: {
         lat: userLatNum,
         lng: userLngNum,
       },
-      totalFound: agentsWithDistance.length,
+      totalFound: finalAgents.length,
     })
   } catch (error) {
     console.error("Find nearby agents error:", error)

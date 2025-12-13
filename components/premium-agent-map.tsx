@@ -74,16 +74,50 @@ interface PremiumAgentMapProps {
 // Premium map libraries - must match all other components using useJsApiLoader
 const libraries: ("places" | "geometry" | "drawing" | "visualization")[] = ["places", "geometry", "drawing"]
 
-// Clean Bolt-style map theme - always visible and clear
-const cleanMapStyle: google.maps.MapTypeStyle[] = [
-  // Keep default Google Maps appearance but reduce clutter
+// Bolt-style clean map theme - clear streets, easy to read
+const boltMapStyle: google.maps.MapTypeStyle[] = [
+  // Clean background colors
+  { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
+  { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+  
+  // Clear, readable text
+  { elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#f5f5f5" }] },
+  
+  // Locality names (city, neighborhood) - prominent
+  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#1a1a1a" }, { weight: 0.5 }] },
+  
+  // Street names - clear and readable
+  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#4a4a4a" }] },
+  { featureType: "road.arterial", elementType: "labels.text.fill", stylers: [{ color: "#1a1a1a" }] },
+  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#1a1a1a" }] },
+  
+  // Roads - clean white with subtle borders
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#e0e0e0" }] },
+  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#d0d0d0" }] },
+  
+  // Parks - subtle green
+  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#c8e6c9" }] },
+  { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#4caf50" }] },
+  
+  // Water - subtle blue
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#bbdefb" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#1976d2" }] },
+  
+  // Hide clutter but keep important landmarks
   { featureType: "poi.business", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.attraction", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.attraction", elementType: "labels.icon", stylers: [{ visibility: "off" }] },
   { featureType: "poi.government", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.medical", stylers: [{ visibility: "simplified" }] },
   { featureType: "poi.school", stylers: [{ visibility: "off" }] },
   { featureType: "poi.sports_complex", stylers: [{ visibility: "off" }] },
   { featureType: "transit.station.bus", stylers: [{ visibility: "off" }] },
+  
+  // Keep important POIs like malls, hospitals
+  { featureType: "poi.medical", elementType: "labels", stylers: [{ visibility: "on" }] },
+  { featureType: "poi.place_of_worship", elementType: "labels", stylers: [{ visibility: "on" }] },
 ]
 
 const defaultCenter = { lat: -1.2921, lng: 36.8219 }
@@ -574,7 +608,7 @@ export function PremiumAgentMap({
           onLoad={onMapLoad}
           onUnmount={onMapUnmount}
           options={{
-            styles: cleanMapStyle,
+            styles: boltMapStyle,
             zoomControl: true,
             zoomControlOptions: {
               position: google.maps.ControlPosition.RIGHT_CENTER,

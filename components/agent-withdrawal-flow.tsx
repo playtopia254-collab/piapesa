@@ -1198,7 +1198,7 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
         ) : (
           <div className="space-y-4">
             {/* Map with agents - single initialization, no reloads */}
-            <div className="h-[400px] sm:h-[500px] w-full relative z-0">
+            <div className="h-[500px] sm:h-[600px] lg:h-[700px] w-full relative z-0">
               <GoogleMapsWrapper
                   userLocation={userCoordinates}
                   agents={nearbyAgents.map(agent => ({
@@ -1757,7 +1757,7 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
                   )}
                 </CardHeader>
                 <CardContent className="p-0">
-                  <div style={{ height: "400px", width: "100%" }} className="sm:h-[450px]">
+                  <div style={{ height: "500px", width: "100%" }} className="sm:h-[600px] lg:h-[700px]">
                     <GoogleMapsWrapper
                       userLocation={userCoordinates}
                       agents={request?.agent ? [{

@@ -110,58 +110,46 @@ function getDistanceMeters(
 function createUserMarkerEl(): HTMLDivElement {
   const el = document.createElement("div")
   el.innerHTML = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="80" height="100" viewBox="0 0 80 100">
+    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="52" viewBox="0 0 40 52">
       <defs>
-        <filter id="userGlowT" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-          <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        <!-- Pin shadow -->
+        <filter id="userPinShadow" x="-50%" y="-20%" width="200%" height="150%">
+          <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.3"/>
         </filter>
-        <filter id="userShadowT" x="-50%" y="-30%" width="200%" height="200%">
-          <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#1e40af" flood-opacity="0.4"/>
-        </filter>
-        <radialGradient id="pulseGradT" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:0.5">
-            <animate attributeName="stop-opacity" values="0.5;0.15;0.5" dur="2s" repeatCount="indefinite"/>
+        <!-- Pin gradient -->
+        <linearGradient id="userPinGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" style="stop-color:#3b82f6"/>
+          <stop offset="100%" style="stop-color:#1d4ed8"/>
+        </linearGradient>
+        <!-- Pulse animation -->
+        <radialGradient id="userPinPulse" cx="50%" cy="100%" r="80%">
+          <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:0.4">
+            <animate attributeName="stop-opacity" values="0.4;0.1;0.4" dur="1.5s" repeatCount="indefinite"/>
           </stop>
           <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0"/>
         </radialGradient>
-        <linearGradient id="userBodyGradT" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" style="stop-color:#3b82f6"/>
-          <stop offset="100%" style="stop-color:#1e40af"/>
-        </linearGradient>
       </defs>
-      <!-- Pulsing ring at feet -->
-      <ellipse cx="40" cy="92" rx="30" ry="8" fill="url(#pulseGradT)">
-        <animate attributeName="rx" values="25;35;25" dur="2s" repeatCount="indefinite"/>
+      
+      <!-- Pulse ring at bottom -->
+      <ellipse cx="20" cy="50" rx="12" ry="4" fill="url(#userPinPulse)">
+        <animate attributeName="rx" values="10;16;10" dur="1.5s" repeatCount="indefinite"/>
       </ellipse>
+      
       <!-- Ground shadow -->
-      <ellipse cx="40" cy="92" rx="16" ry="5" fill="#000000" opacity="0.2"/>
-      <!-- Full body human figure -->
-      <g filter="url(#userShadowT)">
-        <!-- Head -->
-        <circle cx="40" cy="18" r="12" fill="url(#userBodyGradT)" stroke="#ffffff" stroke-width="3"/>
-        <circle cx="37" cy="15" r="4" fill="#60a5fa" opacity="0.4"/>
-        <!-- Body -->
-        <path d="M28 32 L28 55 Q28 60 33 60 L47 60 Q52 60 52 55 L52 32 Q52 28 47 28 L33 28 Q28 28 28 32 Z" 
-              fill="url(#userBodyGradT)" stroke="#ffffff" stroke-width="3"/>
-        <!-- Arms -->
-        <path d="M28 34 L18 50 Q16 54 20 56 L22 54 L30 42" 
-              fill="url(#userBodyGradT)" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
-        <path d="M52 34 L62 50 Q64 54 60 56 L58 54 L50 42" 
-              fill="url(#userBodyGradT)" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
-        <!-- Legs -->
-        <path d="M33 60 L30 82 Q29 87 34 87 L38 87 Q42 87 41 82 L40 65" 
-              fill="url(#userBodyGradT)" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
-        <path d="M47 60 L50 82 Q51 87 46 87 L42 87 Q38 87 39 82 L40 65" 
-              fill="url(#userBodyGradT)" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
+      <ellipse cx="20" cy="50" rx="6" ry="2" fill="#000000" opacity="0.2"/>
+      
+      <!-- Map pin shape -->
+      <g filter="url(#userPinShadow)">
+        <path d="M20 0 C9 0 0 9 0 20 C0 32 20 48 20 48 C20 48 40 32 40 20 C40 9 31 0 20 0 Z" 
+              fill="url(#userPinGrad)" stroke="#ffffff" stroke-width="2"/>
+        <!-- Inner circle -->
+        <circle cx="20" cy="18" r="8" fill="#ffffff"/>
+        <!-- Center dot -->
+        <circle cx="20" cy="18" r="4" fill="#3b82f6"/>
       </g>
-      <!-- Location indicator above head -->
-      <circle cx="40" cy="2" r="5" fill="#22c55e" stroke="#ffffff" stroke-width="2">
-        <animate attributeName="r" values="4;6;4" dur="1.5s" repeatCount="indefinite"/>
-      </circle>
     </svg>
   `
-  el.style.cssText = "width: 80px; height: 100px; cursor: pointer;"
+  el.style.cssText = "width: 40px; height: 52px; cursor: pointer;"
   return el
 }
 
@@ -170,63 +158,84 @@ function createAgentMarkerEl(
   isSelected: boolean
 ): HTMLDivElement {
   const el = document.createElement("div")
+  
+  // Colors based on selection and availability
   const primaryColor = isSelected
-    ? "#10b981"
+    ? "#22c55e"  // Green when selected
     : agent.isAvailable !== false
-    ? "#6366f1"
-    : "#6b7280"
+    ? "#22c55e"  // Green when available
+    : "#6b7280"  // Gray when unavailable
   const secondaryColor = isSelected
-    ? "#059669"
+    ? "#16a34a"
     : agent.isAvailable !== false
-    ? "#4f46e5"
+    ? "#16a34a"
     : "#4b5563"
 
   const selectedPulse = isSelected
-    ? `<radialGradient id="selectedPulse_${agent.id}" cx="50%" cy="40%" r="50%">
+    ? `<radialGradient id="carPulse_${agent.id}" cx="50%" cy="50%" r="60%">
          <stop offset="0%" style="stop-color:${primaryColor};stop-opacity:0.5">
-           <animate attributeName="stop-opacity" values="0.5;0.15;0.5" dur="1.5s" repeatCount="indefinite"/>
+           <animate attributeName="stop-opacity" values="0.5;0.2;0.5" dur="1.5s" repeatCount="indefinite"/>
          </stop>
          <stop offset="100%" style="stop-color:${primaryColor};stop-opacity:0"/>
        </radialGradient>`
     : ""
 
   const selectedPulseCircle = isSelected
-    ? `<circle cx="36" cy="36" r="32" fill="url(#selectedPulse_${agent.id})">
-         <animate attributeName="r" values="28;38;28" dur="1.5s" repeatCount="indefinite"/>
-       </circle>`
+    ? `<ellipse cx="20" cy="28" rx="22" ry="22" fill="url(#carPulse_${agent.id})">
+         <animate attributeName="rx" values="20;26;20" dur="1.5s" repeatCount="indefinite"/>
+         <animate attributeName="ry" values="20;26;20" dur="1.5s" repeatCount="indefinite"/>
+       </ellipse>`
     : ""
 
   const verifiedBadge = isSelected
-    ? `<circle cx="54" cy="16" r="10" fill="#10b981" stroke="#ffffff" stroke-width="2"/>
-       <path d="M50 16 L53 19 L58 12" stroke="#ffffff" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`
+    ? `<circle cx="35" cy="8" r="7" fill="#22c55e" stroke="#ffffff" stroke-width="1.5"/>
+       <path d="M32 8 L34 10 L38 5" stroke="#ffffff" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`
     : ""
 
   el.innerHTML = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="72" height="88" viewBox="0 0 72 88">
+    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="56" viewBox="0 0 40 56">
       <defs>
-        <filter id="pinShadow_${agent.id}" x="-50%" y="-30%" width="200%" height="200%">
-          <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="${secondaryColor}" flood-opacity="0.4"/>
+        <filter id="carShadow_${agent.id}" x="-30%" y="-20%" width="160%" height="150%">
+          <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.25"/>
         </filter>
-        <linearGradient id="pinGrad_${agent.id}" x1="0%" y1="0%" x2="0%" y2="100%">
+        <linearGradient id="carGrad_${agent.id}" x1="0%" y1="0%" x2="0%" y2="100%">
           <stop offset="0%" style="stop-color:${primaryColor}"/>
-          <stop offset="50%" style="stop-color:${primaryColor}"/>
           <stop offset="100%" style="stop-color:${secondaryColor}"/>
         </linearGradient>
         ${selectedPulse}
       </defs>
+      
       ${selectedPulseCircle}
-      <g filter="url(#pinShadow_${agent.id})">
-        <path d="M36 8 C22 8, 12 20, 12 32 C12 48, 36 80, 36 80 C36 80, 60 48, 60 32 C60 20, 50 8, 36 8 Z" 
-              fill="url(#pinGrad_${agent.id})" stroke="#ffffff" stroke-width="3"/>
-        <circle cx="36" cy="30" r="16" fill="#ffffff"/>
-        <circle cx="36" cy="26" r="7" fill="${primaryColor}"/>
-        <path d="M26 40 Q36 32, 46 40" fill="${primaryColor}"/>
+      
+      <!-- Ground shadow -->
+      <ellipse cx="20" cy="52" rx="10" ry="3" fill="#000000" opacity="0.15"/>
+      
+      <!-- Small car icon -->
+      <g filter="url(#carShadow_${agent.id})">
+        <!-- Car body -->
+        <rect x="8" y="16" width="24" height="36" rx="6" ry="6" 
+              fill="url(#carGrad_${agent.id})" stroke="#ffffff" stroke-width="2"/>
+        
+        <!-- Windshield -->
+        <rect x="11" y="20" width="18" height="8" rx="2" fill="#1e293b" opacity="0.8"/>
+        
+        <!-- Rear window -->
+        <rect x="11" y="36" width="18" height="6" rx="2" fill="#1e293b" opacity="0.8"/>
+        
+        <!-- Headlights -->
+        <circle cx="12" cy="18" r="2" fill="#fef08a"/>
+        <circle cx="28" cy="18" r="2" fill="#fef08a"/>
+        
+        <!-- Taillights -->
+        <circle cx="12" cy="50" r="1.5" fill="#ef4444"/>
+        <circle cx="28" cy="50" r="1.5" fill="#ef4444"/>
       </g>
+      
       ${verifiedBadge}
     </svg>
   `
   el.style.cssText =
-    "width: 72px; height: 88px; cursor: pointer; transform: translate(-50%, -100%);"
+    "width: 40px; height: 56px; cursor: pointer; transition: transform 0.2s ease-out;"
   return el
 }
 
@@ -369,18 +378,39 @@ export function BoltAgentTrackingMap({
       map.current.on("load", () => {
         if (!map.current) return
 
-        // Hide POI labels
-        const poiLayers = ["poi-label", "transit-label"]
-        poiLayers.forEach((layer) => {
-          if (map.current?.getLayer(layer)) {
-            map.current.setLayoutProperty(layer, "visibility", "none")
+        // Only hide small POI labels (shops, restaurants) - keep important landmarks
+        if (map.current?.getLayer("poi-label")) {
+          try {
+            // Filter to only show important POIs
+            map.current.setFilter("poi-label", [
+              "match",
+              ["get", "class"],
+              ["park", "hospital", "school", "college", "stadium", "airport", "bus_station", "railway"],
+              true,
+              false
+            ])
+          } catch (e) {
+            // If filter fails, just reduce opacity
+            map.current.setPaintProperty("poi-label", "text-opacity", 0.5)
           }
-        })
+        }
 
         // Subtle water
         if (map.current.getLayer("water")) {
-          map.current.setPaintProperty("water", "fill-color", "#e0f2fe")
+          map.current.setPaintProperty("water", "fill-color", "#dbeafe")
         }
+        
+        // Enhance road labels - make them more visible
+        const roadLabelLayers = ["road-label", "road-number-shield"]
+        roadLabelLayers.forEach((layer) => {
+          if (map.current?.getLayer(layer)) {
+            try {
+              map.current.setPaintProperty(layer, "text-color", "#1f2937")
+            } catch (e) {
+              // Layer might not support this
+            }
+          }
+        })
 
         setMapLoaded(true)
       })

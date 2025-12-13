@@ -244,82 +244,52 @@ function formatDistanceDisplay(meters: number): string {
 // ============================================================================
 
 /**
- * 👤 USER LOCATION MARKER - FULL HUMAN AVATAR
+ * 📍 USER LOCATION MARKER - CLEAN MAP PIN
  * 
- * Premium full-body human silhouette with pulsing ring.
- * Shows head, body, and legs like Bolt's destination marker.
+ * Simple, clean map pin marker for client/user location.
+ * Blue color to distinguish from agent.
  */
 function createUserMarkerElement(): HTMLDivElement {
   const el = document.createElement("div")
   el.className = "bolt-user-marker"
   el.innerHTML = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="80" height="100" viewBox="0 0 80 100">
+    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="52" viewBox="0 0 40 52">
       <defs>
-        <!-- Glow filter for depth -->
-        <filter id="userGlow" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-          <feMerge>
-            <feMergeNode in="coloredBlur"/>
-            <feMergeNode in="SourceGraphic"/>
-          </feMerge>
+        <!-- Pin shadow -->
+        <filter id="pinShadow" x="-50%" y="-20%" width="200%" height="150%">
+          <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.3"/>
         </filter>
-        <!-- Drop shadow -->
-        <filter id="userShadow" x="-50%" y="-30%" width="200%" height="200%">
-          <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#1e40af" flood-opacity="0.4"/>
-        </filter>
-        <!-- Animated pulse gradient -->
-        <radialGradient id="pulseGradUser" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:0.5">
-            <animate attributeName="stop-opacity" values="0.5;0.15;0.5" dur="2s" repeatCount="indefinite"/>
-          </stop>
-          <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0">
-            <animate attributeName="stop-opacity" values="0;0.08;0" dur="2s" repeatCount="indefinite"/>
-          </stop>
-        </radialGradient>
-        <!-- Body gradient -->
-        <linearGradient id="userBodyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+        <!-- Pin gradient -->
+        <linearGradient id="pinGrad" x1="0%" y1="0%" x2="0%" y2="100%">
           <stop offset="0%" style="stop-color:#3b82f6"/>
-          <stop offset="100%" style="stop-color:#1e40af"/>
+          <stop offset="100%" style="stop-color:#1d4ed8"/>
         </linearGradient>
+        <!-- Pulse animation -->
+        <radialGradient id="pinPulse" cx="50%" cy="100%" r="80%">
+          <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:0.4">
+            <animate attributeName="stop-opacity" values="0.4;0.1;0.4" dur="1.5s" repeatCount="indefinite"/>
+          </stop>
+          <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0"/>
+        </radialGradient>
       </defs>
       
-      <!-- Pulsing ring at feet -->
-      <ellipse cx="40" cy="92" rx="30" ry="8" fill="url(#pulseGradUser)">
-        <animate attributeName="rx" values="25;35;25" dur="2s" repeatCount="indefinite"/>
-        <animate attributeName="ry" values="6;10;6" dur="2s" repeatCount="indefinite"/>
+      <!-- Pulse ring at bottom -->
+      <ellipse cx="20" cy="50" rx="12" ry="4" fill="url(#pinPulse)">
+        <animate attributeName="rx" values="10;16;10" dur="1.5s" repeatCount="indefinite"/>
       </ellipse>
       
       <!-- Ground shadow -->
-      <ellipse cx="40" cy="92" rx="16" ry="5" fill="#000000" opacity="0.2"/>
+      <ellipse cx="20" cy="50" rx="6" ry="2" fill="#000000" opacity="0.2"/>
       
-      <!-- Full body human figure with shadow -->
-      <g filter="url(#userShadow)">
-        <!-- Head -->
-        <circle cx="40" cy="18" r="12" fill="url(#userBodyGrad)" stroke="#ffffff" stroke-width="3"/>
-        <!-- Face highlight -->
-        <circle cx="37" cy="15" r="4" fill="#60a5fa" opacity="0.4"/>
-        
-        <!-- Body/Torso -->
-        <path d="M28 32 L28 55 Q28 60 33 60 L47 60 Q52 60 52 55 L52 32 Q52 28 47 28 L33 28 Q28 28 28 32 Z" 
-              fill="url(#userBodyGrad)" stroke="#ffffff" stroke-width="3"/>
-        
-        <!-- Arms -->
-        <path d="M28 34 L18 50 Q16 54 20 56 L22 54 L30 42" 
-              fill="url(#userBodyGrad)" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
-        <path d="M52 34 L62 50 Q64 54 60 56 L58 54 L50 42" 
-              fill="url(#userBodyGrad)" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
-        
-        <!-- Legs -->
-        <path d="M33 60 L30 82 Q29 87 34 87 L38 87 Q42 87 41 82 L40 65" 
-              fill="url(#userBodyGrad)" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
-        <path d="M47 60 L50 82 Q51 87 46 87 L42 87 Q38 87 39 82 L40 65" 
-              fill="url(#userBodyGrad)" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
+      <!-- Map pin shape -->
+      <g filter="url(#pinShadow)">
+        <path d="M20 0 C9 0 0 9 0 20 C0 32 20 48 20 48 C20 48 40 32 40 20 C40 9 31 0 20 0 Z" 
+              fill="url(#pinGrad)" stroke="#ffffff" stroke-width="2"/>
+        <!-- Inner circle -->
+        <circle cx="20" cy="18" r="8" fill="#ffffff"/>
+        <!-- Center dot -->
+        <circle cx="20" cy="18" r="4" fill="#3b82f6"/>
       </g>
-      
-      <!-- Location pin indicator above head -->
-      <circle cx="40" cy="2" r="5" fill="#22c55e" stroke="#ffffff" stroke-width="2">
-        <animate attributeName="r" values="4;6;4" dur="1.5s" repeatCount="indefinite"/>
-      </circle>
     </svg>
   `
   el.style.cssText = "width: 80px; height: 100px; cursor: pointer;"
@@ -421,135 +391,51 @@ function createAgentMarkerElement(
 }
 
 /**
- * 🚗 BOLT-STYLE CAR MARKER (For tracking)
+ * 🚗 SMALL CAR MARKER (For agent tracking)
  * 
- * Sleek top-down car view like Bolt/Uber.
- * Smooth aerodynamic design with gradient and glow effects.
+ * Compact top-down car icon that fits well on the map.
+ * Clean, simple design with smooth animations.
  */
 function createCarMarkerElement(heading: number = 0): HTMLDivElement {
   const el = document.createElement("div")
   el.className = "bolt-car-marker"
   el.innerHTML = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="60" height="100" viewBox="0 0 60 100" style="transform: rotate(${heading}deg)">
+    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="48" viewBox="0 0 32 48" style="transform: rotate(${heading}deg)">
       <defs>
         <!-- Car shadow -->
-        <filter id="carShadow" x="-50%" y="-20%" width="200%" height="150%">
-          <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#000000" flood-opacity="0.3"/>
+        <filter id="carShadowSmall" x="-50%" y="-20%" width="200%" height="150%">
+          <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000000" flood-opacity="0.25"/>
         </filter>
-        <!-- Outer glow for visibility -->
-        <filter id="carOuterGlow" x="-100%" y="-100%" width="300%" height="300%">
-          <feGaussianBlur stdDeviation="4" result="glow"/>
-          <feMerge>
-            <feMergeNode in="glow"/>
-            <feMergeNode in="SourceGraphic"/>
-          </feMerge>
-        </filter>
-        <!-- Car body gradient - Bolt green -->
-        <linearGradient id="boltCarBody" x1="0%" y1="0%" x2="0%" y2="100%">
+        <!-- Car body gradient - Green like Bolt -->
+        <linearGradient id="carBodySmall" x1="0%" y1="0%" x2="0%" y2="100%">
           <stop offset="0%" style="stop-color:#22c55e"/>
-          <stop offset="40%" style="stop-color:#16a34a"/>
-          <stop offset="100%" style="stop-color:#15803d"/>
+          <stop offset="100%" style="stop-color:#16a34a"/>
         </linearGradient>
-        <!-- Windshield gradient -->
-        <linearGradient id="windshield" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" style="stop-color:#1e293b"/>
-          <stop offset="50%" style="stop-color:#334155"/>
-          <stop offset="100%" style="stop-color:#1e293b"/>
-        </linearGradient>
-        <!-- Direction pulse -->
-        <radialGradient id="dirPulse" cx="50%" cy="0%" r="80%">
-          <stop offset="0%" style="stop-color:#22c55e;stop-opacity:0.9">
-            <animate attributeName="stop-opacity" values="0.9;0.4;0.9" dur="1s" repeatCount="indefinite"/>
-          </stop>
-          <stop offset="100%" style="stop-color:#22c55e;stop-opacity:0"/>
-        </radialGradient>
       </defs>
       
-      <!-- Direction indicator beam -->
-      <ellipse cx="30" cy="8" rx="12" ry="20" fill="url(#dirPulse)">
-        <animate attributeName="ry" values="18;25;18" dur="1s" repeatCount="indefinite"/>
-      </ellipse>
-      
-      <!-- Main car body with shadow -->
-      <g filter="url(#carShadow)">
-        <!-- Car body - sleek sedan shape -->
-        <path d="
-          M30 15
-          Q45 18, 48 30
-          L50 45
-          Q52 55, 50 70
-          Q48 85, 30 88
-          Q12 85, 10 70
-          Q8 55, 10 45
-          L12 30
-          Q15 18, 30 15
-          Z
-        " fill="url(#boltCarBody)" stroke="#ffffff" stroke-width="2.5"/>
+      <!-- Main car body -->
+      <g filter="url(#carShadowSmall)">
+        <!-- Car body - simple rounded rectangle -->
+        <rect x="6" y="8" width="20" height="32" rx="6" ry="6" 
+              fill="url(#carBodySmall)" stroke="#ffffff" stroke-width="2"/>
         
-        <!-- Roof/cabin area -->
-        <path d="
-          M30 28
-          Q42 30, 44 40
-          L45 52
-          Q44 60, 30 62
-          Q16 60, 15 52
-          L16 40
-          Q18 30, 30 28
-          Z
-        " fill="#15803d" stroke="none"/>
+        <!-- Windshield (front) -->
+        <rect x="9" y="12" width="14" height="6" rx="2" fill="#1e293b" opacity="0.8"/>
         
-        <!-- Front windshield -->
-        <path d="
-          M30 30
-          Q40 31, 42 38
-          L42 44
-          Q40 46, 30 46
-          Q20 46, 18 44
-          L18 38
-          Q20 31, 30 30
-          Z
-        " fill="url(#windshield)" stroke="#94a3b8" stroke-width="0.5"/>
-        
-        <!-- Rear windshield -->
-        <path d="
-          M30 52
-          Q38 52, 40 56
-          L40 60
-          Q38 62, 30 62
-          Q22 62, 20 60
-          L20 56
-          Q22 52, 30 52
-          Z
-        " fill="url(#windshield)" stroke="#94a3b8" stroke-width="0.5"/>
+        <!-- Rear window -->
+        <rect x="9" y="28" width="14" height="5" rx="2" fill="#1e293b" opacity="0.8"/>
         
         <!-- Headlights -->
-        <ellipse cx="20" cy="22" rx="4" ry="3" fill="#fef9c3">
-          <animate attributeName="opacity" values="1;0.7;1" dur="0.8s" repeatCount="indefinite"/>
-        </ellipse>
-        <ellipse cx="40" cy="22" rx="4" ry="3" fill="#fef9c3">
-          <animate attributeName="opacity" values="1;0.7;1" dur="0.8s" repeatCount="indefinite"/>
-        </ellipse>
+        <circle cx="10" cy="10" r="2" fill="#fef08a"/>
+        <circle cx="22" cy="10" r="2" fill="#fef08a"/>
         
         <!-- Taillights -->
-        <ellipse cx="18" cy="80" rx="4" ry="2.5" fill="#ef4444"/>
-        <ellipse cx="42" cy="80" rx="4" ry="2.5" fill="#ef4444"/>
-        
-        <!-- Side mirrors -->
-        <ellipse cx="8" cy="38" rx="3" ry="2" fill="#16a34a" stroke="#ffffff" stroke-width="1"/>
-        <ellipse cx="52" cy="38" rx="3" ry="2" fill="#16a34a" stroke="#ffffff" stroke-width="1"/>
-        
-        <!-- Wheels (showing through body) -->
-        <ellipse cx="16" cy="32" rx="3" ry="5" fill="#1f2937" opacity="0.6"/>
-        <ellipse cx="44" cy="32" rx="3" ry="5" fill="#1f2937" opacity="0.6"/>
-        <ellipse cx="16" cy="68" rx="3" ry="5" fill="#1f2937" opacity="0.6"/>
-        <ellipse cx="44" cy="68" rx="3" ry="5" fill="#1f2937" opacity="0.6"/>
-        
-        <!-- Center highlight line -->
-        <line x1="30" y1="20" x2="30" y2="75" stroke="#4ade80" stroke-width="1" opacity="0.4"/>
+        <circle cx="10" cy="38" r="1.5" fill="#ef4444"/>
+        <circle cx="22" cy="38" r="1.5" fill="#ef4444"/>
       </g>
     </svg>
   `
-  el.style.cssText = "width: 60px; height: 100px; cursor: pointer;"
+  el.style.cssText = "width: 32px; height: 48px; cursor: pointer; transition: transform 0.3s ease-out;"
   return el
 }
 
@@ -668,39 +554,56 @@ export function BoltMapboxMap({
         if (!map.current) return
         
         /**
-         * 🎨 CUSTOM STYLE MODIFICATIONS
+         * 🎨 REFINED STYLE MODIFICATIONS
          * 
-         * After the base style loads, we customize it further:
-         * - Remove unnecessary POIs
-         * - Mute colors
-         * - Emphasize roads
+         * Keep major street names visible for navigation
+         * Only hide small POIs (shops, restaurants)
+         * Keep transit and road labels for orientation
          */
         
-        // Hide POI labels (shops, restaurants, etc.) - reduces clutter
-        const poiLayers = [
-          "poi-label",
-          "transit-label",
-        ]
-        poiLayers.forEach((layer) => {
-          if (map.current?.getLayer(layer)) {
-            map.current.setLayoutProperty(layer, "visibility", "none")
+        // Only hide small POI labels (shops, restaurants) - keep landmarks
+        if (map.current?.getLayer("poi-label")) {
+          // Filter to only show important POIs (parks, hospitals, schools, etc.)
+          try {
+            map.current.setFilter("poi-label", [
+              "match",
+              ["get", "class"],
+              ["park", "hospital", "school", "college", "stadium", "airport", "bus_station", "railway"],
+              true,
+              false
+            ])
+          } catch (e) {
+            // If filter fails, just reduce opacity
+            map.current.setPaintProperty("poi-label", "text-opacity", 0.6)
           }
-        })
-
-        // Make water more subtle
-        if (map.current.getLayer("water")) {
-          map.current.setPaintProperty("water", "fill-color", "#e0f2fe")
         }
 
-        // Make parks more subtle
+        // Make water more subtle but visible
+        if (map.current.getLayer("water")) {
+          map.current.setPaintProperty("water", "fill-color", "#dbeafe")
+        }
+
+        // Make parks subtle
         const parkLayers = ["landuse", "park"]
         parkLayers.forEach((layer) => {
           if (map.current?.getLayer(layer)) {
             try {
               map.current.setPaintProperty(layer, "fill-color", "#dcfce7")
-              map.current.setPaintProperty(layer, "fill-opacity", 0.5)
+              map.current.setPaintProperty(layer, "fill-opacity", 0.6)
             } catch (e) {
               // Layer might not support these properties
+            }
+          }
+        })
+        
+        // Enhance road labels for better visibility
+        const roadLabelLayers = ["road-label", "road-number-shield"]
+        roadLabelLayers.forEach((layer) => {
+          if (map.current?.getLayer(layer)) {
+            try {
+              map.current.setPaintProperty(layer, "text-color", "#1f2937")
+            } catch (e) {
+              // Layer might not support this
             }
           }
         })

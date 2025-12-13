@@ -656,13 +656,28 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
 
   // Poll for request status updates
   const pollStatus = useCallback(async () => {
-    if (!request?._id) return
+    if (!request?._id) {
+      console.log("pollStatus: No request ID, skipping poll")
+      return
+    }
+
+    const requestId = request._id // Capture the ID to avoid stale reference
+    const currentStatus = request.status // Capture current status
 
     try {
-      const response = await fetch(`/api/agent-withdrawals/${request._id}`)
+      console.log("pollStatus: Polling request", requestId, "current status:", currentStatus)
+      const response = await fetch(`/api/agent-withdrawals/${requestId}`)
       const data = await response.json()
+      
+      console.log("pollStatus: Got response", { 
+        success: data.success, 
+        status: data.request?.status,
+        hasAgent: !!data.request?.agent,
+        agentName: data.request?.agent?.name
+      })
 
       if (data.success && data.request) {
+        const previousStatus = currentStatus
         setRequest(data.request)
 
         // Update step based on status
@@ -671,6 +686,7 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
             setStep("searching")
             break
           case "matched":
+            console.log("pollStatus: Agent matched! Updating step to matched")
             setStep("matched")
             // Start tracking agent location
             if (userCoordinates) {
@@ -678,6 +694,7 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
             }
             break
           case "in_progress":
+            console.log("pollStatus: Agent in progress! Updating step to in_progress")
             setStep("in_progress")
             // Continue tracking
             if (userCoordinates) {
@@ -685,6 +702,7 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
             }
             break
           case "completed":
+            console.log("pollStatus: Request completed!")
             setStep("completed")
             // Update user balance from response
             if (data.request.user?.balance !== undefined) {
@@ -703,20 +721,29 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
             break
           case "cancelled":
           case "expired":
+            console.log("pollStatus: Request cancelled/expired")
             setStep("cancelled")
             break
+        }
+        
+        if (previousStatus !== data.request.status) {
+          console.log("pollStatus: Status changed from", previousStatus, "to", data.request.status)
         }
       }
     } catch (error) {
       console.error("Failed to poll status:", error)
     }
-  }, [request?._id, user.id, userCoordinates, trackAgent])
+  }, [request?._id, request?.status, user.id, userCoordinates, trackAgent])
 
   // Poll every 3 seconds when searching or matched
   useEffect(() => {
     if (!request?._id) return
     if (step === "completed" || step === "cancelled" || step === "amount") return
 
+    // Poll immediately when effect runs (don't wait 3 seconds for first poll)
+    pollStatus()
+    
+    // Then continue polling every 3 seconds
     const interval = setInterval(pollStatus, 3000)
     return () => clearInterval(interval)
   }, [request?._id, step, pollStatus])
@@ -924,8 +951,13 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
 
   // Cancel request
   const cancelRequest = async (reason?: string) => {
-    if (!request?._id) return
+    if (!request?._id) {
+      console.error("Cannot cancel: No request ID")
+      setError("Cannot cancel: No active request found")
+      return
+    }
 
+    console.log("Cancelling request:", request._id, "with reason:", reason || cancelReason)
     setIsLoading(true)
     setError("")
 
@@ -941,6 +973,7 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
       })
 
       const data = await response.json()
+      console.log("Cancel response:", data)
 
       if (!response.ok) {
         throw new Error(data.error || "Failed to cancel")
@@ -949,7 +982,9 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
       setShowCancelDialog(false)
       setCancelReason("")
       setStep("cancelled")
+      setRequest(null) // Clear the request
     } catch (error) {
+      console.error("Cancel request error:", error)
       setError(error instanceof Error ? error.message : "Failed to cancel")
     } finally {
       setIsLoading(false)
@@ -1500,6 +1535,14 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
               <p className="text-xs text-muted-foreground max-w-md mx-auto leading-relaxed px-2">
                 Your request has been sent to nearby agents. You'll be matched once an agent accepts your request.
               </p>
+
+              {/* Error Display */}
+              {error && (
+                <Alert variant="destructive" className="mt-4">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
 
               {/* Cancel Button */}
               <Button 

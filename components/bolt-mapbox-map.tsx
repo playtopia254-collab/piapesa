@@ -244,16 +244,16 @@ function formatDistanceDisplay(meters: number): string {
 // ============================================================================
 
 /**
- * 🔵 USER LOCATION MARKER
+ * 👤 USER LOCATION MARKER - FULL HUMAN AVATAR
  * 
- * Premium pulsing blue dot with accuracy ring.
- * The pulse animation draws attention without being distracting.
+ * Premium full-body human silhouette with pulsing ring.
+ * Shows head, body, and legs like Bolt's destination marker.
  */
 function createUserMarkerElement(): HTMLDivElement {
   const el = document.createElement("div")
   el.className = "bolt-user-marker"
   el.innerHTML = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">
+    <svg xmlns="http://www.w3.org/2000/svg" width="80" height="100" viewBox="0 0 80 100">
       <defs>
         <!-- Glow filter for depth -->
         <filter id="userGlow" x="-50%" y="-50%" width="200%" height="200%">
@@ -263,8 +263,12 @@ function createUserMarkerElement(): HTMLDivElement {
             <feMergeNode in="SourceGraphic"/>
           </feMerge>
         </filter>
+        <!-- Drop shadow -->
+        <filter id="userShadow" x="-50%" y="-30%" width="200%" height="200%">
+          <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#1e40af" flood-opacity="0.4"/>
+        </filter>
         <!-- Animated pulse gradient -->
-        <radialGradient id="pulseGrad" cx="50%" cy="50%" r="50%">
+        <radialGradient id="pulseGradUser" cx="50%" cy="50%" r="50%">
           <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:0.5">
             <animate attributeName="stop-opacity" values="0.5;0.15;0.5" dur="2s" repeatCount="indefinite"/>
           </stop>
@@ -272,27 +276,53 @@ function createUserMarkerElement(): HTMLDivElement {
             <animate attributeName="stop-opacity" values="0;0.08;0" dur="2s" repeatCount="indefinite"/>
           </stop>
         </radialGradient>
-        <!-- Main dot gradient for 3D effect -->
-        <linearGradient id="userDotGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:#60a5fa"/>
-          <stop offset="100%" style="stop-color:#2563eb"/>
+        <!-- Body gradient -->
+        <linearGradient id="userBodyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" style="stop-color:#3b82f6"/>
+          <stop offset="100%" style="stop-color:#1e40af"/>
         </linearGradient>
       </defs>
-      <!-- Pulsing ring - draws attention -->
-      <circle cx="40" cy="40" r="35" fill="url(#pulseGrad)">
-        <animate attributeName="r" values="28;38;28" dur="2s" repeatCount="indefinite"/>
-      </circle>
-      <!-- Accuracy ring - subtle indicator -->
-      <circle cx="40" cy="40" r="22" fill="none" stroke="#3b82f6" stroke-width="2" opacity="0.2"/>
-      <!-- Main dot with glow -->
-      <g filter="url(#userGlow)">
-        <circle cx="40" cy="40" r="12" fill="url(#userDotGrad)" stroke="#ffffff" stroke-width="4"/>
-        <!-- Inner highlight for 3D depth -->
-        <circle cx="37" cy="37" r="4" fill="#93c5fd" opacity="0.5"/>
+      
+      <!-- Pulsing ring at feet -->
+      <ellipse cx="40" cy="92" rx="30" ry="8" fill="url(#pulseGradUser)">
+        <animate attributeName="rx" values="25;35;25" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="ry" values="6;10;6" dur="2s" repeatCount="indefinite"/>
+      </ellipse>
+      
+      <!-- Ground shadow -->
+      <ellipse cx="40" cy="92" rx="16" ry="5" fill="#000000" opacity="0.2"/>
+      
+      <!-- Full body human figure with shadow -->
+      <g filter="url(#userShadow)">
+        <!-- Head -->
+        <circle cx="40" cy="18" r="12" fill="url(#userBodyGrad)" stroke="#ffffff" stroke-width="3"/>
+        <!-- Face highlight -->
+        <circle cx="37" cy="15" r="4" fill="#60a5fa" opacity="0.4"/>
+        
+        <!-- Body/Torso -->
+        <path d="M28 32 L28 55 Q28 60 33 60 L47 60 Q52 60 52 55 L52 32 Q52 28 47 28 L33 28 Q28 28 28 32 Z" 
+              fill="url(#userBodyGrad)" stroke="#ffffff" stroke-width="3"/>
+        
+        <!-- Arms -->
+        <path d="M28 34 L18 50 Q16 54 20 56 L22 54 L30 42" 
+              fill="url(#userBodyGrad)" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
+        <path d="M52 34 L62 50 Q64 54 60 56 L58 54 L50 42" 
+              fill="url(#userBodyGrad)" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
+        
+        <!-- Legs -->
+        <path d="M33 60 L30 82 Q29 87 34 87 L38 87 Q42 87 41 82 L40 65" 
+              fill="url(#userBodyGrad)" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
+        <path d="M47 60 L50 82 Q51 87 46 87 L42 87 Q38 87 39 82 L40 65" 
+              fill="url(#userBodyGrad)" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
       </g>
+      
+      <!-- Location pin indicator above head -->
+      <circle cx="40" cy="2" r="5" fill="#22c55e" stroke="#ffffff" stroke-width="2">
+        <animate attributeName="r" values="4;6;4" dur="1.5s" repeatCount="indefinite"/>
+      </circle>
     </svg>
   `
-  el.style.cssText = "width: 80px; height: 80px; cursor: pointer;"
+  el.style.cssText = "width: 80px; height: 100px; cursor: pointer;"
   return el
 }
 
@@ -391,78 +421,135 @@ function createAgentMarkerElement(
 }
 
 /**
- * 🚗 CAR MARKER (For tracking)
+ * 🚗 BOLT-STYLE CAR MARKER (For tracking)
  * 
- * Premium car icon with rotation and animated headlights.
- * Smooth rotation based on heading direction.
+ * Sleek top-down car view like Bolt/Uber.
+ * Smooth aerodynamic design with gradient and glow effects.
  */
 function createCarMarkerElement(heading: number = 0): HTMLDivElement {
   const el = document.createElement("div")
   el.className = "bolt-car-marker"
   el.innerHTML = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80" style="transform: rotate(${heading}deg)">
+    <svg xmlns="http://www.w3.org/2000/svg" width="60" height="100" viewBox="0 0 60 100" style="transform: rotate(${heading}deg)">
       <defs>
-        <!-- Car shadow and glow -->
-        <filter id="carGlow" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
-          <feOffset dx="0" dy="2"/>
-          <feComponentTransfer>
-            <feFuncA type="linear" slope="0.5"/>
-          </feComponentTransfer>
+        <!-- Car shadow -->
+        <filter id="carShadow" x="-50%" y="-20%" width="200%" height="150%">
+          <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#000000" flood-opacity="0.3"/>
+        </filter>
+        <!-- Outer glow for visibility -->
+        <filter id="carOuterGlow" x="-100%" y="-100%" width="300%" height="300%">
+          <feGaussianBlur stdDeviation="4" result="glow"/>
           <feMerge>
-            <feMergeNode/>
+            <feMergeNode in="glow"/>
             <feMergeNode in="SourceGraphic"/>
           </feMerge>
         </filter>
-        <!-- Car body gradients -->
-        <linearGradient id="carBody" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" style="stop-color:#1e3a8a"/>
-          <stop offset="50%" style="stop-color:#1e40af"/>
-          <stop offset="100%" style="stop-color:#1e3a8a"/>
+        <!-- Car body gradient - Bolt green -->
+        <linearGradient id="boltCarBody" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" style="stop-color:#22c55e"/>
+          <stop offset="40%" style="stop-color:#16a34a"/>
+          <stop offset="100%" style="stop-color:#15803d"/>
         </linearGradient>
-        <linearGradient id="carRoof" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" style="stop-color:#3b82f6"/>
-          <stop offset="100%" style="stop-color:#2563eb"/>
+        <!-- Windshield gradient -->
+        <linearGradient id="windshield" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" style="stop-color:#1e293b"/>
+          <stop offset="50%" style="stop-color:#334155"/>
+          <stop offset="100%" style="stop-color:#1e293b"/>
         </linearGradient>
-        <!-- Direction indicator -->
-        <radialGradient id="directionGlow" cx="50%" cy="0%" r="100%">
-          <stop offset="0%" style="stop-color:#22c55e;stop-opacity:0.8"/>
+        <!-- Direction pulse -->
+        <radialGradient id="dirPulse" cx="50%" cy="0%" r="80%">
+          <stop offset="0%" style="stop-color:#22c55e;stop-opacity:0.9">
+            <animate attributeName="stop-opacity" values="0.9;0.4;0.9" dur="1s" repeatCount="indefinite"/>
+          </stop>
           <stop offset="100%" style="stop-color:#22c55e;stop-opacity:0"/>
         </radialGradient>
       </defs>
-      <g filter="url(#carGlow)">
-        <!-- Direction indicator (front) -->
-        <ellipse cx="40" cy="12" rx="10" ry="15" fill="url(#directionGlow)" opacity="0.6">
-          <animate attributeName="opacity" values="0.6;0.3;0.6" dur="1s" repeatCount="indefinite"/>
-        </ellipse>
-        <!-- Car shadow -->
-        <ellipse cx="40" cy="60" rx="18" ry="6" fill="#000000" opacity="0.2"/>
-        <!-- Car body -->
-        <rect x="22" y="32" width="36" height="24" rx="4" fill="url(#carBody)" stroke="#ffffff" stroke-width="2"/>
-        <!-- Car roof/cabin -->
-        <path d="M26 32 L30 22 H50 L54 32" fill="url(#carRoof)" stroke="#ffffff" stroke-width="2"/>
-        <!-- Windows -->
-        <rect x="28" y="24" width="10" height="8" rx="1" fill="#1e293b" opacity="0.8"/>
-        <rect x="42" y="24" width="10" height="8" rx="1" fill="#1e293b" opacity="0.8"/>
+      
+      <!-- Direction indicator beam -->
+      <ellipse cx="30" cy="8" rx="12" ry="20" fill="url(#dirPulse)">
+        <animate attributeName="ry" values="18;25;18" dur="1s" repeatCount="indefinite"/>
+      </ellipse>
+      
+      <!-- Main car body with shadow -->
+      <g filter="url(#carShadow)">
+        <!-- Car body - sleek sedan shape -->
+        <path d="
+          M30 15
+          Q45 18, 48 30
+          L50 45
+          Q52 55, 50 70
+          Q48 85, 30 88
+          Q12 85, 10 70
+          Q8 55, 10 45
+          L12 30
+          Q15 18, 30 15
+          Z
+        " fill="url(#boltCarBody)" stroke="#ffffff" stroke-width="2.5"/>
+        
+        <!-- Roof/cabin area -->
+        <path d="
+          M30 28
+          Q42 30, 44 40
+          L45 52
+          Q44 60, 30 62
+          Q16 60, 15 52
+          L16 40
+          Q18 30, 30 28
+          Z
+        " fill="#15803d" stroke="none"/>
+        
+        <!-- Front windshield -->
+        <path d="
+          M30 30
+          Q40 31, 42 38
+          L42 44
+          Q40 46, 30 46
+          Q20 46, 18 44
+          L18 38
+          Q20 31, 30 30
+          Z
+        " fill="url(#windshield)" stroke="#94a3b8" stroke-width="0.5"/>
+        
+        <!-- Rear windshield -->
+        <path d="
+          M30 52
+          Q38 52, 40 56
+          L40 60
+          Q38 62, 30 62
+          Q22 62, 20 60
+          L20 56
+          Q22 52, 30 52
+          Z
+        " fill="url(#windshield)" stroke="#94a3b8" stroke-width="0.5"/>
+        
         <!-- Headlights -->
-        <circle cx="26" cy="36" r="3" fill="#fef08a">
-          <animate attributeName="opacity" values="1;0.7;1" dur="0.5s" repeatCount="indefinite"/>
-        </circle>
-        <circle cx="54" cy="36" r="3" fill="#fef08a">
-          <animate attributeName="opacity" values="1;0.7;1" dur="0.5s" repeatCount="indefinite"/>
-        </circle>
+        <ellipse cx="20" cy="22" rx="4" ry="3" fill="#fef9c3">
+          <animate attributeName="opacity" values="1;0.7;1" dur="0.8s" repeatCount="indefinite"/>
+        </ellipse>
+        <ellipse cx="40" cy="22" rx="4" ry="3" fill="#fef9c3">
+          <animate attributeName="opacity" values="1;0.7;1" dur="0.8s" repeatCount="indefinite"/>
+        </ellipse>
+        
         <!-- Taillights -->
-        <circle cx="26" cy="52" r="2.5" fill="#ef4444"/>
-        <circle cx="54" cy="52" r="2.5" fill="#ef4444"/>
-        <!-- Wheels -->
-        <circle cx="28" cy="58" r="5" fill="#1f2937" stroke="#374151" stroke-width="2"/>
-        <circle cx="28" cy="58" r="2" fill="#6b7280"/>
-        <circle cx="52" cy="58" r="5" fill="#1f2937" stroke="#374151" stroke-width="2"/>
-        <circle cx="52" cy="58" r="2" fill="#6b7280"/>
+        <ellipse cx="18" cy="80" rx="4" ry="2.5" fill="#ef4444"/>
+        <ellipse cx="42" cy="80" rx="4" ry="2.5" fill="#ef4444"/>
+        
+        <!-- Side mirrors -->
+        <ellipse cx="8" cy="38" rx="3" ry="2" fill="#16a34a" stroke="#ffffff" stroke-width="1"/>
+        <ellipse cx="52" cy="38" rx="3" ry="2" fill="#16a34a" stroke="#ffffff" stroke-width="1"/>
+        
+        <!-- Wheels (showing through body) -->
+        <ellipse cx="16" cy="32" rx="3" ry="5" fill="#1f2937" opacity="0.6"/>
+        <ellipse cx="44" cy="32" rx="3" ry="5" fill="#1f2937" opacity="0.6"/>
+        <ellipse cx="16" cy="68" rx="3" ry="5" fill="#1f2937" opacity="0.6"/>
+        <ellipse cx="44" cy="68" rx="3" ry="5" fill="#1f2937" opacity="0.6"/>
+        
+        <!-- Center highlight line -->
+        <line x1="30" y1="20" x2="30" y2="75" stroke="#4ade80" stroke-width="1" opacity="0.4"/>
       </g>
     </svg>
   `
-  el.style.cssText = "width: 80px; height: 80px; cursor: pointer;"
+  el.style.cssText = "width: 60px; height: 100px; cursor: pointer;"
   return el
 }
 

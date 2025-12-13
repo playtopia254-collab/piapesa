@@ -110,34 +110,58 @@ function getDistanceMeters(
 function createUserMarkerEl(): HTMLDivElement {
   const el = document.createElement("div")
   el.innerHTML = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">
+    <svg xmlns="http://www.w3.org/2000/svg" width="80" height="100" viewBox="0 0 80 100">
       <defs>
-        <filter id="userGlow" x="-50%" y="-50%" width="200%" height="200%">
+        <filter id="userGlowT" x="-50%" y="-50%" width="200%" height="200%">
           <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
           <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
         </filter>
-        <radialGradient id="pulseGrad" cx="50%" cy="50%" r="50%">
+        <filter id="userShadowT" x="-50%" y="-30%" width="200%" height="200%">
+          <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#1e40af" flood-opacity="0.4"/>
+        </filter>
+        <radialGradient id="pulseGradT" cx="50%" cy="50%" r="50%">
           <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:0.5">
             <animate attributeName="stop-opacity" values="0.5;0.15;0.5" dur="2s" repeatCount="indefinite"/>
           </stop>
           <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0"/>
         </radialGradient>
-        <linearGradient id="userDotGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:#60a5fa"/>
-          <stop offset="100%" style="stop-color:#2563eb"/>
+        <linearGradient id="userBodyGradT" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" style="stop-color:#3b82f6"/>
+          <stop offset="100%" style="stop-color:#1e40af"/>
         </linearGradient>
       </defs>
-      <circle cx="40" cy="40" r="35" fill="url(#pulseGrad)">
-        <animate attributeName="r" values="28;38;28" dur="2s" repeatCount="indefinite"/>
-      </circle>
-      <circle cx="40" cy="40" r="22" fill="none" stroke="#3b82f6" stroke-width="2" opacity="0.2"/>
-      <g filter="url(#userGlow)">
-        <circle cx="40" cy="40" r="12" fill="url(#userDotGrad)" stroke="#ffffff" stroke-width="4"/>
-        <circle cx="37" cy="37" r="4" fill="#93c5fd" opacity="0.5"/>
+      <!-- Pulsing ring at feet -->
+      <ellipse cx="40" cy="92" rx="30" ry="8" fill="url(#pulseGradT)">
+        <animate attributeName="rx" values="25;35;25" dur="2s" repeatCount="indefinite"/>
+      </ellipse>
+      <!-- Ground shadow -->
+      <ellipse cx="40" cy="92" rx="16" ry="5" fill="#000000" opacity="0.2"/>
+      <!-- Full body human figure -->
+      <g filter="url(#userShadowT)">
+        <!-- Head -->
+        <circle cx="40" cy="18" r="12" fill="url(#userBodyGradT)" stroke="#ffffff" stroke-width="3"/>
+        <circle cx="37" cy="15" r="4" fill="#60a5fa" opacity="0.4"/>
+        <!-- Body -->
+        <path d="M28 32 L28 55 Q28 60 33 60 L47 60 Q52 60 52 55 L52 32 Q52 28 47 28 L33 28 Q28 28 28 32 Z" 
+              fill="url(#userBodyGradT)" stroke="#ffffff" stroke-width="3"/>
+        <!-- Arms -->
+        <path d="M28 34 L18 50 Q16 54 20 56 L22 54 L30 42" 
+              fill="url(#userBodyGradT)" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
+        <path d="M52 34 L62 50 Q64 54 60 56 L58 54 L50 42" 
+              fill="url(#userBodyGradT)" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
+        <!-- Legs -->
+        <path d="M33 60 L30 82 Q29 87 34 87 L38 87 Q42 87 41 82 L40 65" 
+              fill="url(#userBodyGradT)" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
+        <path d="M47 60 L50 82 Q51 87 46 87 L42 87 Q38 87 39 82 L40 65" 
+              fill="url(#userBodyGradT)" stroke="#ffffff" stroke-width="3" stroke-linejoin="round"/>
       </g>
+      <!-- Location indicator above head -->
+      <circle cx="40" cy="2" r="5" fill="#22c55e" stroke="#ffffff" stroke-width="2">
+        <animate attributeName="r" values="4;6;4" dur="1.5s" repeatCount="indefinite"/>
+      </circle>
     </svg>
   `
-  el.style.cssText = "width: 80px; height: 80px; cursor: pointer;"
+  el.style.cssText = "width: 80px; height: 100px; cursor: pointer;"
   return el
 }
 

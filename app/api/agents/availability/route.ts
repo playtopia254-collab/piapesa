@@ -69,23 +69,40 @@ export async function POST(request: NextRequest) {
       lastActiveAt: new Date(),
     }
 
-    // If going online and location provided, store it
+    // If going online and location provided, validate accuracy first
     if (newAvailability && lat !== undefined && lng !== undefined) {
       const latNum = Number.parseFloat(lat)
       const lngNum = Number.parseFloat(lng)
+      const accuracy = body.accuracy ? Number.parseFloat(body.accuracy) : null
+      
       if (!isNaN(latNum) && !isNaN(lngNum)) {
+        // SERVER-SIDE SAFETY CHECK: Reject if accuracy > 100m
+        if (accuracy !== null && accuracy > 100) {
+          console.log(`❌ Agent ${agentId} rejected: accuracy ${accuracy}m > 100m threshold`)
+          return NextResponse.json(
+            { 
+              error: `GPS accuracy too low (±${Math.round(accuracy)}m). Need ≤100m to go online. Please move to a location with better GPS signal.`,
+              accuracy: accuracy,
+              threshold: 100
+            },
+            { status: 400 }
+          )
+        }
+        
         updateData.lastKnownLocation = {
           lat: latNum,
           lng: lngNum,
+          accuracy: accuracy || null,
           updatedAt: new Date(),
         }
-        // Always update location field (not just if missing) for real-time tracking
+        // Always update location field for real-time tracking
         updateData.location = {
           lat: latNum,
           lng: lngNum,
+          accuracy: accuracy || null,
           updatedAt: new Date(),
         }
-        console.log(`📍 Agent ${agentId} going online at: ${latNum}, ${lngNum}`)
+        console.log(`📍 Agent ${agentId} going online at: ${latNum}, ${lngNum} (accuracy: ±${accuracy ? Math.round(accuracy) : 'unknown'}m)`)
       }
     }
 

@@ -117,7 +117,7 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
   const locationWatchCleanup = useRef<(() => void) | null>(null)
   const hasSearchedAgents = useRef(false) // Prevent multiple searches
   const mapInitialized = useRef(false) // Prevent map re-initialization
-  const ACCURACY_THRESHOLD = 100 // Only search when accuracy ≤ 100m
+  const ACCURACY_THRESHOLD = 100 // Only search when accuracy ≤ 100m (for initial search)
   const MIN_WAIT_TIME = 6000 // Minimum 6 seconds wait time
 
   // Get user's current location with accuracy gate (Uber-like)
@@ -212,17 +212,20 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
     }
   }, [])
 
-  // Fetch nearby agents - SINGLE SEARCH with 100m radius
+  // Fetch nearby agents - CONTINUOUS SEARCH with 2km radius (keeps searching until found)
   const fetchNearbyAgents = useCallback(async (coords: { lat: number; lng: number }) => {
-    setIsLoadingAgents(true)
+    // Don't set loading on every call - only on first call
+    if (!hasSearchedAgents.current) {
+      setIsLoadingAgents(true)
+    }
     setError("")
     
     console.log(`🔍 Searching agents at: ${coords.lat}, ${coords.lng} (accuracy: ${locationAccuracy ? `±${Math.round(locationAccuracy)}m` : 'unknown'})`)
 
     try {
-      // Search with 100m radius (Uber-like precision)
+      // Search with 2km radius
       const response = await fetch(
-        `/api/agents/nearby?lat=${coords.lat}&lng=${coords.lng}&maxDistance=0.1`
+        `/api/agents/nearby?lat=${coords.lat}&lng=${coords.lng}&maxDistance=2`
       )
       const data = await response.json()
 
@@ -234,9 +237,14 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
 
       if (data.success && data.agents) {
         if (data.agents.length === 0) {
-          // No agents found - will continue passive scanning
+          // No agents found - silently continue passive scanning (don't show error, don't stop loading)
           setError("")
+          // Keep isLoadingAgents true to show searching state
+          // Will continue searching via passive scan interval
         } else {
+          // Agents found! Clear any errors and show them
+          setError("")
+          setIsLoadingAgents(false)
           setNearbyAgents(data.agents.map((agent: any) => ({
             id: agent.id,
             name: agent.name,
@@ -249,14 +257,17 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
           })))
         }
       } else {
-        setError(data.error || "No agents found nearby")
+        // API error - but don't show error, just keep searching
+        setError("")
+        // Keep isLoadingAgents true to continue searching
       }
     } catch (error) {
       console.error("Failed to fetch agents:", error)
-      setError("Failed to find nearby agents")
-    } finally {
-      setIsLoadingAgents(false)
+      // Don't show error to user - silently retry
+      setError("")
+      // Keep isLoadingAgents true to continue searching
     }
+    // Don't set isLoadingAgents to false in finally - let it stay true until agents found
   }, [locationAccuracy])
 
   // Search agents ONLY ONCE when location is locked and accurate
@@ -269,22 +280,23 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
     // Mark as searched to prevent re-searching
     hasSearchedAgents.current = true
     
-    // Single agent search with 100m radius
+    // Single agent search with 2km radius
     fetchNearbyAgents(userCoordinates)
   }, [clientLocationLocked, userCoordinates, step, fetchNearbyAgents])
 
-  // Passive scanning: If no agents found, scan every 5 seconds (without reloading)
+  // Passive scanning: Continuously scan every 3 seconds until agents found (no reloads)
   useEffect(() => {
     if (!clientLocationLocked || !userCoordinates || step !== "map" || nearbyAgents.length > 0) {
       return
     }
 
-    // Passive scan every 5 seconds
+    // Keep searching every 3 seconds until agents are found
     const scanInterval = setInterval(() => {
       if (userCoordinates && nearbyAgents.length === 0) {
+        console.log("🔄 Passive scan: Searching for agents...")
         fetchNearbyAgents(userCoordinates)
       }
-    }, 5000)
+    }, 3000) // Scan every 3 seconds
 
     return () => clearInterval(scanInterval)
   }, [clientLocationLocked, userCoordinates, step, nearbyAgents.length, fetchNearbyAgents])
@@ -912,34 +924,31 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
               <div className="flex flex-col items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
                 <p className="text-sm sm:text-base text-muted-foreground">
-                  Searching for agents within 100m...
+                  Searching for agents within 2km...
                 </p>
               </div>
             </CardContent>
           </Card>
         ) : nearbyAgents.length === 0 ? (
+          // Keep showing searching state - don't show "no agents found"
           <Card>
             <CardContent className="py-8 sm:py-12 px-4 sm:px-6">
               <div className="flex flex-col items-center justify-center text-center">
-                <AlertCircle className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground mb-4" />
-                <p className="text-sm sm:text-base text-muted-foreground">No agents within 100m yet</p>
+                <Loader2 className="h-10 w-10 sm:h-12 sm:w-12 animate-spin text-primary mb-4" />
+                <p className="text-sm sm:text-base text-muted-foreground font-semibold">
+                  Searching for agents...
+                </p>
                 <p className="text-xs sm:text-sm text-muted-foreground mt-2">
-                  Still searching...
+                  Looking for agents within 2km
                 </p>
                 {locationAccuracy && (
                   <p className="text-xs text-muted-foreground mt-1">
                     Location accuracy: ±{Math.round(locationAccuracy)}m
                   </p>
                 )}
-                <Button
-                  variant="outline"
-                  onClick={startMapSelection}
-                  className="mt-4 w-full sm:w-auto"
-                  disabled={isRefiningLocation}
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  {isRefiningLocation ? "Refining..." : "Refresh"}
-                </Button>
+                <p className="text-xs text-muted-foreground mt-3 animate-pulse">
+                  Please wait, agents will appear automatically...
+                </p>
               </div>
             </CardContent>
           </Card>

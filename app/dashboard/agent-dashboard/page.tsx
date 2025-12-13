@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -83,6 +83,10 @@ export default function AgentDashboardPage() {
   const [successMessage, setSuccessMessage] = useState("")
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [agentLocation, setAgentLocation] = useState<{ lat: number; lng: number } | null>(null)
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null)
+  const [isWaitingForAccuracy, setIsWaitingForAccuracy] = useState(false)
+  const locationWatchIdRef = useRef<number | null>(null)
+  const ACCURACY_THRESHOLD = 100 // Agent must have ≤100m accuracy to go online
   const [stats, setStats] = useState({
     activeRequests: 0,
     pendingRequests: 0,
@@ -172,46 +176,27 @@ export default function AgentDashboardPage() {
     return () => clearInterval(interval)
   }, [user?.id, isAvailable, fetchRequests, fetchStats])
 
-  // Continuously update location when online or have active requests
-  // Update every 3-5 seconds for real-time tracking (Uber-like)
-  useEffect(() => {
-    if (!user?.id) return
-    if (!isAvailable && myRequests.length === 0) return
+  // Background location updates are handled by watchPosition in startBackgroundLocationUpdates
+  // No need for interval-based updates when using watchPosition
 
-    // Update location immediately
-    updateAgentLocation()
-
-    // Update every 3 seconds while active (for real-time discovery)
-    const locationInterval = setInterval(() => {
-      updateAgentLocation()
-    }, 3000) // Changed from 30s to 3s for real-time updates
-
-    return () => clearInterval(locationInterval)
-  }, [user?.id, isAvailable, myRequests.length])
-
-  // Update agent location with better accuracy
-  const updateAgentLocation = async () => {
-    if (!user?.id) return
+  // Update agent location (called from background GPS watcher)
+  const updateAgentLocation = useCallback(async () => {
+    if (!user?.id || !agentLocation) return
 
     try {
-      const coords = await getCurrentLocation()
-      setAgentLocation(coords) // Store in state for map display
-      
-      console.log(`📍 Agent ${user.id} updating location: ${coords.lat}, ${coords.lng} (accuracy: ±${coords.accuracy ? Math.round(coords.accuracy) : 'unknown'}m)`)
-      
       const response = await fetch("/api/agents/update-location", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           agentId: user.id,
-          lat: coords.lat,
-          lng: coords.lng,
+          lat: agentLocation.lat,
+          lng: agentLocation.lng,
         }),
       })
 
       const data = await response.json()
       if (data.success) {
-        console.log(`✅ Agent location updated successfully: ${data.location.lat}, ${data.location.lng}`)
+        console.log(`✅ Agent location updated: ${data.location.lat}, ${data.location.lng} (accuracy: ±${gpsAccuracy ? Math.round(gpsAccuracy) : 'unknown'}m)`)
       } else {
         console.error("❌ Failed to update agent location:", data.error)
       }
@@ -219,7 +204,7 @@ export default function AgentDashboardPage() {
       console.error("❌ Failed to update location:", error)
       // Don't show error to user, location is optional
     }
-  }
+  }, [user?.id, agentLocation, gpsAccuracy])
 
   // Open Google Maps for navigation
   const openGoogleMaps = (destLat: number, destLng: number, customerName: string) => {
@@ -261,68 +246,191 @@ export default function AgentDashboardPage() {
     return `${distance.toFixed(1)}km`
   }
 
-  // Toggle availability
-  const toggleAvailability = async () => {
+  // Start GPS accuracy check before going online
+  const startAccuracyCheck = () => {
+    if (!user?.id || isAvailable) return
+
+    setIsWaitingForAccuracy(true)
+    setGpsAccuracy(null)
+    setError("")
+
+    if (!navigator.geolocation) {
+      setError("Geolocation is not supported by your browser")
+      setIsWaitingForAccuracy(false)
+      return
+    }
+
+    // Watch GPS position with high accuracy
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        const accuracy = position.coords.accuracy
+        const lat = position.coords.latitude
+        const lng = position.coords.longitude
+
+        setGpsAccuracy(accuracy)
+        setAgentLocation({ lat, lng })
+
+        console.log(`📍 Agent GPS: ±${Math.round(accuracy)}m at ${lat}, ${lng}`)
+
+        // Only go online when accuracy ≤ 100m
+        if (accuracy <= ACCURACY_THRESHOLD && !isAvailable) {
+          // Accuracy is good - mark agent online
+          markAgentOnline({ lat, lng, accuracy })
+          // Stop watching (will restart for background updates)
+          if (watchId !== null) {
+            navigator.geolocation.clearWatch(watchId)
+          }
+          setIsWaitingForAccuracy(false)
+        }
+      },
+      (error) => {
+        console.error("GPS watch error:", error)
+        setError("Failed to get GPS location. Please enable location permissions.")
+        setIsWaitingForAccuracy(false)
+        if (locationWatchIdRef.current !== null) {
+          navigator.geolocation.clearWatch(locationWatchIdRef.current)
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 0, // Always get fresh location
+        timeout: 10000,
+      }
+    )
+
+    locationWatchIdRef.current = watchId
+
+    // Timeout after 20 seconds if accuracy never reaches threshold
+    setTimeout(() => {
+      if (gpsAccuracy === null || (gpsAccuracy !== null && gpsAccuracy > ACCURACY_THRESHOLD)) {
+        if (watchId !== null) {
+          navigator.geolocation.clearWatch(watchId)
+        }
+        setIsWaitingForAccuracy(false)
+        setError("We're having trouble getting a precise location. Please move closer to a window or outside.")
+      }
+    }, 20000)
+  }
+
+  // Mark agent online (only called when accuracy ≤ 100m)
+  const markAgentOnline = async (locationData: { lat: number; lng: number; accuracy: number }) => {
     if (!user?.id) return
 
     try {
-      // If going online, get location and send it with availability update
-      let locationData: { lat?: number; lng?: number } = {}
-      if (!isAvailable) {
-        try {
-          const coords = await getCurrentLocation()
-          locationData = { lat: coords.lat, lng: coords.lng }
-          setAgentLocation(coords)
-        } catch (error) {
-          console.error("Failed to get location:", error)
-          // Continue anyway, location will be updated by the interval
-        }
-      }
-
       const response = await fetch("/api/agents/availability", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           agentId: user.id,
-          isAvailable: !isAvailable,
-          ...locationData, // Include location if going online
+          isAvailable: true,
+          lat: locationData.lat,
+          lng: locationData.lng,
+          accuracy: locationData.accuracy, // Send accuracy for server validation
         }),
       })
 
       const data = await response.json()
       if (data.success) {
-        setIsAvailable(data.isAvailable)
+        setIsAvailable(true)
         // Update session storage
-        const updatedUser = { ...user, isAvailable: data.isAvailable }
+        const updatedUser = { ...user, isAvailable: true }
         sessionStorage.setItem("currentUser", JSON.stringify(updatedUser))
+        setUser(updatedUser)
         
-        // If going online, verify location was set
-        if (data.isAvailable && locationData.lat && locationData.lng) {
-          console.log(`✅ Agent ${user.id} is now ONLINE at: ${locationData.lat}, ${locationData.lng}`)
-          // Verify location was saved by checking status
-          setTimeout(async () => {
-            try {
-              const statusResponse = await fetch(`/api/agents/check-status?agentId=${user.id}`)
-              const statusData = await statusResponse.json()
-              if (statusData.success) {
-                console.log("📊 Agent Status:", {
-                  isAvailable: statusData.agent.isAvailable,
-                  hasLocation: statusData.agent.hasLocation,
-                  location: statusData.agent.location,
-                  locationAge: statusData.agent.locationAge ? `${statusData.agent.locationAge}s ago` : "N/A"
-                })
-              }
-            } catch (e) {
-              console.error("Failed to check agent status:", e)
-            }
-          }, 1000)
-        }
+        console.log(`✅ Agent ${user.id} is now ONLINE at: ${locationData.lat}, ${locationData.lng} (accuracy: ±${Math.round(locationData.accuracy)}m)`)
+        
+        // Start background location updates
+        startBackgroundLocationUpdates()
+      } else {
+        setError(data.error || "Failed to go online")
+        setIsWaitingForAccuracy(false)
       }
     } catch (error) {
-      console.error("Failed to toggle availability:", error)
-      setError("Failed to update availability")
+      console.error("Failed to mark agent online:", error)
+      setError("Failed to go online")
+      setIsWaitingForAccuracy(false)
     }
   }
+
+  // Background location updates (runs after agent is online)
+  const startBackgroundLocationUpdates = () => {
+    if (!navigator.geolocation) return
+
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        const accuracy = position.coords.accuracy
+        const lat = position.coords.latitude
+        const lng = position.coords.longitude
+
+        // Update accuracy display
+        setGpsAccuracy(accuracy)
+        setAgentLocation({ lat, lng })
+
+        // Update location in database (every 2-3 seconds via updateAgentLocation)
+        updateAgentLocation()
+      },
+      (error) => {
+        console.error("Background GPS watch error:", error)
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 2000, // Allow 2 second old data for continuous updates
+        timeout: 10000,
+      }
+    )
+
+    locationWatchIdRef.current = watchId
+  }
+
+  // Toggle availability (go offline or start accuracy check)
+  const toggleAvailability = async () => {
+    if (!user?.id) return
+
+    // If going offline
+    if (isAvailable) {
+      try {
+        // Stop GPS watching
+        if (locationWatchIdRef.current !== null) {
+          navigator.geolocation.clearWatch(locationWatchIdRef.current)
+          locationWatchIdRef.current = null
+        }
+
+        const response = await fetch("/api/agents/availability", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            agentId: user.id,
+            isAvailable: false,
+          }),
+        })
+
+        const data = await response.json()
+        if (data.success) {
+          setIsAvailable(false)
+          setGpsAccuracy(null)
+          // Update session storage
+          const updatedUser = { ...user, isAvailable: false }
+          sessionStorage.setItem("currentUser", JSON.stringify(updatedUser))
+          setUser(updatedUser)
+        }
+      } catch (error) {
+        console.error("Failed to toggle availability:", error)
+        setError("Failed to update availability")
+      }
+    } else {
+      // Going online - start accuracy check
+      startAccuracyCheck()
+    }
+  }
+
+  // Cleanup GPS watcher on unmount
+  useEffect(() => {
+    return () => {
+      if (locationWatchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(locationWatchIdRef.current)
+      }
+    }
+  }, [])
 
   // Accept a withdrawal request
   const acceptRequest = async (requestId: string) => {
@@ -750,10 +858,33 @@ export default function AgentDashboardPage() {
             </div>
           </div>
 
+          {/* GPS Accuracy Badge (when online) */}
+          {isAvailable && gpsAccuracy !== null && (
+            <div className="pt-2 border-t border-border/50">
+              <div className={`flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs sm:text-sm ${
+                gpsAccuracy <= 5 
+                  ? "bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300"
+                  : gpsAccuracy <= 20
+                  ? "bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300"
+                  : gpsAccuracy <= 100
+                  ? "bg-yellow-50 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300"
+                  : "bg-orange-50 dark:bg-orange-950 text-orange-700 dark:text-orange-300"
+              }`}>
+                <div className={`w-2 h-2 rounded-full ${
+                  gpsAccuracy <= 20 ? "bg-green-500" : gpsAccuracy <= 100 ? "bg-yellow-500" : "bg-orange-500"
+                }`} />
+                <span className="font-semibold">ONLINE</span>
+                <span>•</span>
+                <span>Location accuracy: ±{Math.round(gpsAccuracy)}m</span>
+              </div>
+            </div>
+          )}
+
           {/* Bottom Section: Action Button */}
           <div className="pt-3 sm:pt-4 border-t border-border/50">
             <Button
               onClick={toggleAvailability}
+              disabled={isWaitingForAccuracy}
               className={`w-full h-11 sm:h-12 font-semibold text-sm sm:text-base transition-all duration-300 ${
                 isAvailable 
                   ? "bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-md shadow-red-500/20 hover:shadow-lg hover:shadow-red-500/30" 
@@ -761,7 +892,12 @@ export default function AgentDashboardPage() {
               }`}
               size="lg"
             >
-              {isAvailable ? (
+              {isWaitingForAccuracy ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <span>Checking GPS Accuracy...</span>
+                </>
+              ) : isAvailable ? (
                 <>
                   <XCircle className="h-4 w-4 mr-2" />
                   <span className="hidden sm:inline">Go Offline - Stop Accepting Requests</span>
@@ -778,6 +914,98 @@ export default function AgentDashboardPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* GPS Accuracy Check Dialog (when trying to go online) */}
+      <Dialog open={isWaitingForAccuracy} onOpenChange={(open) => {
+        if (!open && !isAvailable) {
+          // Only allow closing if not online yet
+          setIsWaitingForAccuracy(false)
+          if (locationWatchIdRef.current !== null) {
+            navigator.geolocation.clearWatch(locationWatchIdRef.current)
+            locationWatchIdRef.current = null
+          }
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Radio className="h-5 w-5 text-blue-600" />
+              Getting your location...
+            </DialogTitle>
+            <DialogDescription>
+              We need accurate GPS to ensure reliable agent discovery
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {/* Live Accuracy Display */}
+            {gpsAccuracy !== null ? (
+              <div className="space-y-3">
+                <div className="text-center">
+                  <div className="text-4xl font-bold mb-2">
+                    ±{Math.round(gpsAccuracy)}m
+                  </div>
+                  <div className={`text-sm font-medium ${
+                    gpsAccuracy <= 5
+                      ? "text-green-600 dark:text-green-400"
+                      : gpsAccuracy <= 20
+                      ? "text-green-600 dark:text-green-400"
+                      : gpsAccuracy <= 100
+                      ? "text-yellow-600 dark:text-yellow-400"
+                      : "text-orange-600 dark:text-orange-400"
+                  }`}>
+                    {gpsAccuracy <= 5
+                      ? "✓ Excellent GPS signal"
+                      : gpsAccuracy <= 20
+                      ? "✓ Good GPS signal"
+                      : gpsAccuracy <= 100
+                      ? "🟡 Almost there..."
+                      : "🟠 Improving GPS signal..."}
+                  </div>
+                </div>
+                
+                {/* Progress indicator */}
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>GPS Accuracy</span>
+                    <span>Target: ≤100m</span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div
+                      className={`h-2 rounded-full transition-all duration-500 ${
+                        gpsAccuracy <= 100
+                          ? "bg-green-500"
+                          : "bg-orange-500"
+                      }`}
+                      style={{
+                        width: `${Math.min((100 / Math.max(gpsAccuracy, 1)) * 100, 100)}%`
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Status message */}
+                {gpsAccuracy > 100 && (
+                  <div className="bg-orange-50 dark:bg-orange-950 p-3 rounded-lg text-sm text-orange-800 dark:text-orange-200">
+                    <p className="font-medium mb-1">Need better GPS signal</p>
+                    <p className="text-xs">Move closer to a window or go outside for better accuracy</p>
+                  </div>
+                )}
+                
+                {gpsAccuracy <= 100 && (
+                  <div className="bg-green-50 dark:bg-green-950 p-3 rounded-lg text-sm text-green-800 dark:text-green-200">
+                    <p className="font-medium">✓ Location ready! Going online...</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-4" />
+                <p className="text-sm text-muted-foreground">Initializing GPS...</p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Active Requests (My Requests) */}
       {myRequests.length > 0 && (

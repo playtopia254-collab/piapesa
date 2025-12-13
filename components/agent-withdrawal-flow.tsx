@@ -30,6 +30,8 @@ import {
   ArrowLeft,
   RefreshCw,
   X,
+  Car,
+  Shield,
 } from "lucide-react"
 import { CurrencyFormatter } from "@/components/currency-formatter"
 import { dispatchBalanceUpdate } from "@/lib/balance-updater"
@@ -38,6 +40,8 @@ import { UberAgentTrackingMap } from "@/components/uber-agent-tracking-map"
 import { GoogleMapsWrapper } from "@/components/google-maps-wrapper"
 import { AgentReviewModal } from "@/components/agent-review-modal"
 import { PositionSmoother } from "@/lib/smooth-marker"
+import { PremiumPlacesAutocomplete } from "@/components/premium-places-autocomplete"
+import { PremiumStreetView } from "@/components/premium-street-view"
 
 interface AgentWithdrawalFlowProps {
   user: {
@@ -126,6 +130,22 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
   if (!agentPositionSmoother.current) {
     agentPositionSmoother.current = new PositionSmoother(0.35) // 0.35 = smooth but responsive
   }
+  
+  // Snap location to nearest road for smoother tracking (premium feature)
+  const snapToRoad = useCallback(async (location: { lat: number; lng: number }): Promise<{ lat: number; lng: number }> => {
+    try {
+      const response = await fetch(`/api/google/roads?lat=${location.lat}&lng=${location.lng}`)
+      const data = await response.json()
+      
+      if (data.success && data.snapped && data.location) {
+        return data.location
+      }
+    } catch (error) {
+      console.error("Failed to snap to road:", error)
+    }
+    return location // Return original if snap fails
+  }, [])
+  
   const ACCURACY_THRESHOLD = 100 // Only search when accuracy ≤ 100m (for initial search)
   const MIN_WAIT_TIME = 6000 // Minimum 6 seconds wait time
 
@@ -256,6 +276,56 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
   }, [])
 
   // Fetch nearby agents - CONTINUOUS SEARCH with 2km radius (keeps searching until found)
+  // Enrich agents with accurate ETAs using Distance Matrix API
+  const enrichAgentsWithETAs = useCallback(async (agents: Agent[], userCoords: { lat: number; lng: number }) => {
+    if (agents.length === 0) return agents
+    
+    try {
+      const destinations = agents.map(a => a.location).filter(loc => loc && loc.lat && loc.lng)
+      
+      if (destinations.length === 0) return agents
+      
+      const response = await fetch("/api/google/distance-matrix", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          origin: userCoords,
+          destinations,
+          mode: "driving",
+          trafficModel: "best_guess",
+        }),
+      })
+      
+      const data = await response.json()
+      
+      if (data.success && data.results) {
+        // Enrich agents with ETA data
+        return agents.map((agent, index) => {
+          const etaData = data.results[index]
+          if (etaData && etaData.status === "OK") {
+            return {
+              ...agent,
+              etaSeconds: etaData.durationInTraffic?.value || etaData.duration?.value || null,
+              etaFormatted: etaData.durationInTraffic?.text || etaData.duration?.text || null,
+              drivingDistance: etaData.distance?.value || null,
+              drivingDistanceFormatted: etaData.distance?.text || null,
+            }
+          }
+          return agent
+        }).sort((a, b) => {
+          // Sort by ETA (fastest first)
+          const etaA = (a as any).etaSeconds || Infinity
+          const etaB = (b as any).etaSeconds || Infinity
+          return etaA - etaB
+        })
+      }
+    } catch (error) {
+      console.error("Failed to fetch ETAs:", error)
+    }
+    
+    return agents
+  }, [])
+
   const fetchNearbyAgents = useCallback(async (coords: { lat: number; lng: number }) => {
     // Don't set loading on every call - only on first call
     if (!hasSearchedAgents.current) {
@@ -288,16 +358,23 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
           // Agents found! Clear any errors and show them
           setError("")
           setIsLoadingAgents(false)
-          setNearbyAgents(data.agents.map((agent: any) => ({
+          
+          // Map agents to our format
+          let mappedAgents = data.agents.map((agent: any) => ({
             id: agent.id,
             name: agent.name,
             phone: agent.phone,
-            location: agent.location || agent.lastKnownLocation, // Use exact GPS coordinates
+            location: agent.location || agent.lastKnownLocation,
             rating: agent.rating || 5.0,
             totalTransactions: agent.totalTransactions || 0,
             distance: agent.distance || 0,
             distanceFormatted: agent.distanceFormatted || "0m",
-          })))
+          }))
+          
+          // Enrich with accurate ETAs using Distance Matrix API
+          mappedAgents = await enrichAgentsWithETAs(mappedAgents, coords)
+          
+          setNearbyAgents(mappedAgents)
         }
       } else {
         // API error - but don't show error, just keep searching
@@ -311,7 +388,7 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
       // Keep isLoadingAgents true to continue searching
     }
     // Don't set isLoadingAgents to false in finally - let it stay true until agents found
-  }, [locationAccuracy])
+  }, [locationAccuracy, enrichAgentsWithETAs])
 
   // Search agents ONLY ONCE when location is locked and accurate
   // No repeated searches - single discovery
@@ -889,6 +966,43 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
               />
             </div>
 
+            {/* Premium Address Search */}
+            <div className="space-y-2">
+              <Label className="text-sm flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-primary" />
+                Meeting Location (Optional)
+              </Label>
+              <PremiumPlacesAutocomplete
+                placeholder="Search for a landmark or address..."
+                currentLocation={userLocation}
+                onPlaceSelect={(place) => {
+                  if (place.location) {
+                    setUserLocation(place.location)
+                    setLocation(place.description)
+                  } else {
+                    setLocation(place.description)
+                  }
+                }}
+                className="w-full"
+              />
+              <p className="text-xs text-muted-foreground">
+                💡 Your GPS location will be used. Add a landmark to help agents find you faster.
+              </p>
+            </div>
+
+            {/* Street View Preview */}
+            {userLocation && (
+              <div className="space-y-2">
+                <Label className="text-sm">Location Preview</Label>
+                <PremiumStreetView
+                  location={userLocation}
+                  showControls={false}
+                  showLocationBadge={true}
+                  className="h-40"
+                />
+              </div>
+            )}
+
             {/* Quick amount buttons */}
             <div className="grid grid-cols-3 sm:flex sm:flex-wrap gap-2">
               {[500, 1000, 2000, 5000, 10000].map((amt) => (
@@ -1066,33 +1180,58 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
                   // Use distance from agent object (updated in real-time)
                   const realTimeDistance = agent.distance ? Math.round(agent.distance * 1000) : 0
                   
+                  // Get ETA info if available
+                  const agentWithETA = agent as any
+                  const hasETA = agentWithETA.etaFormatted
+                  
                   return (
                     <Card
                       key={agent.id}
-                      className={`cursor-pointer transition-all ${
+                      className={`cursor-pointer transition-all duration-200 ${
                         selectedAgent?.id === agent.id
-                          ? "border-green-500 bg-green-50 dark:bg-green-950"
-                          : "hover:border-primary"
+                          ? "border-2 border-green-500 bg-green-50 dark:bg-green-950 shadow-lg shadow-green-500/20"
+                          : "hover:border-primary hover:shadow-md"
                       }`}
                       onClick={() => handleAgentSelect(agent)}
                     >
                       <CardContent className="p-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                              <User className="h-5 w-5 text-primary" />
+                            <div className="relative">
+                              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg shadow-lg">
+                                {agent.name.charAt(0)}
+                              </div>
+                              {/* Online indicator */}
+                              <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-500 rounded-full border-2 border-white dark:border-gray-900"></div>
                             </div>
                             <div>
-                              <p className="font-semibold">{agent.name}</p>
+                              <p className="font-semibold text-base">{agent.name}</p>
                               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                                <span>{agent.rating}</span>
+                                <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+                                <span className="font-medium">{agent.rating.toFixed(1)}</span>
+                                <span className="text-muted-foreground/50">•</span>
+                                <span>{agent.totalTransactions} trips</span>
                               </div>
                             </div>
                           </div>
-                          <Badge className="text-sm font-semibold">
-                            {realTimeDistance < 1000 ? `${realTimeDistance}m away` : `${(realTimeDistance / 1000).toFixed(1)}km away`}
-                          </Badge>
+                          <div className="text-right">
+                            {/* ETA Badge - Premium feature */}
+                            {hasETA ? (
+                              <div className="flex flex-col items-end gap-1">
+                                <Badge className="bg-primary text-sm font-bold px-2.5 py-1">
+                                  <Clock className="h-3.5 w-3.5 mr-1" />
+                                  {agentWithETA.etaFormatted}
+                                </Badge>
+                                <span className="text-xs text-muted-foreground">
+                                  {agentWithETA.drivingDistanceFormatted || `${realTimeDistance < 1000 ? `${realTimeDistance}m` : `${(realTimeDistance / 1000).toFixed(1)}km`}`}
+                                </span>
+                              </div>
+                            ) : (
+                              <Badge className="text-sm font-semibold">
+                                {realTimeDistance < 1000 ? `${realTimeDistance}m away` : `${(realTimeDistance / 1000).toFixed(1)}km away`}
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -1893,4 +2032,5 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
 
   return null
 }
+
 

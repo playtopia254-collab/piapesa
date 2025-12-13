@@ -375,12 +375,57 @@ export function UberAgentTrackingMap({
   }
 
   if (loadError) {
+    const isProduction = typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1"
+    const currentDomain = typeof window !== "undefined" ? window.location.origin : ""
+    
     return (
       <Card>
         <CardContent className="py-12">
-          <div className="text-center text-red-500">
-            <p className="font-semibold text-lg">Error loading Google Maps</p>
-            <p className="text-sm text-muted-foreground mt-2">{loadError.message}</p>
+          <div className="text-center space-y-4">
+            <div className="text-red-500">
+              <p className="font-semibold text-lg">Oops! Something went wrong.</p>
+              <p className="text-sm text-muted-foreground mt-2">
+                This page didn't load Google Maps correctly. See the JavaScript console for technical details.
+              </p>
+            </div>
+            <div className="text-left bg-muted p-4 rounded-lg text-sm space-y-2 max-w-md mx-auto">
+              <p className="font-semibold">Troubleshooting Steps:</p>
+              <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                <li>Verify API key is set in environment variables (`.env.local` for dev, hosting platform env vars for production)</li>
+                {isProduction && (
+                  <li className="font-semibold text-orange-600">
+                    For production/mobile: Add your domain to API key restrictions:
+                    <ul className="list-disc list-inside ml-4 mt-1 font-normal">
+                      <li>Go to Google Cloud Console → APIs & Services → Credentials</li>
+                      <li>Click your API key → Application restrictions</li>
+                      <li>Add: <code className="bg-background px-1 rounded">{currentDomain}/*</code></li>
+                      <li>Also add: <code className="bg-background px-1 rounded">*.{currentDomain.replace(/^https?:\/\//, "")}/*</code></li>
+                    </ul>
+                  </li>
+                )}
+                <li>Enable these 4 APIs in Google Cloud Console:
+                  <ul className="list-disc list-inside ml-4 mt-1">
+                    <li>Maps JavaScript API</li>
+                    <li>Geocoding API</li>
+                    <li>Directions API</li>
+                    <li>Distance Matrix API</li>
+                  </ul>
+                </li>
+                <li>Enable billing in Google Cloud (required even for free tier)</li>
+                {!isProduction && (
+                  <li>If API key is restricted, add `http://localhost:3000/*` to allowed referrers</li>
+                )}
+                <li className="font-semibold text-blue-600">
+                  For mobile browsers: Ensure your production site uses HTTPS (required by Google Maps)
+                </li>
+              </ol>
+              {loadError.message && (
+                <div className="mt-3 p-2 bg-red-50 dark:bg-red-950 rounded text-xs">
+                  <p className="font-semibold">Error Details:</p>
+                  <p className="text-red-700 dark:text-red-300">{loadError.message}</p>
+                </div>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -401,14 +446,38 @@ export function UberAgentTrackingMap({
   }
 
   if (!apiKey) {
+    const isProduction = typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1"
+    
     return (
       <Card>
         <CardContent className="py-12">
-          <div className="text-center text-red-500">
-            <p className="font-semibold text-lg">Google Maps API Key Missing</p>
-            <p className="text-sm text-muted-foreground mt-2">
-              Please add your API key to `.env.local`
-            </p>
+          <div className="text-center space-y-4">
+            <div className="text-red-500">
+              <p className="font-semibold text-lg">Google Maps API Key Missing</p>
+              <p className="text-sm text-muted-foreground mt-2">
+                {isProduction 
+                  ? "Please add NEXT_PUBLIC_GOOGLE_MAPS_API_KEY to your hosting platform's environment variables"
+                  : "Please add your API key to `.env.local`"}
+              </p>
+            </div>
+            <div className="text-left bg-muted p-4 rounded-lg text-sm space-y-2 max-w-md mx-auto">
+              <p className="font-semibold">How to fix:</p>
+              {isProduction ? (
+                <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                  <li>Go to your hosting platform (Vercel, Netlify, etc.)</li>
+                  <li>Navigate to Environment Variables settings</li>
+                  <li>Add: <code className="bg-background px-1 rounded">NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code></li>
+                  <li>Set the value to your Google Maps API key</li>
+                  <li>Redeploy your application</li>
+                </ol>
+              ) : (
+                <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                  <li>Create or edit `.env.local` in your project root</li>
+                  <li>Add: <code className="bg-background px-1 rounded">NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=your_api_key_here</code></li>
+                  <li>Restart your dev server</li>
+                </ol>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>

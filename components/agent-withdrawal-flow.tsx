@@ -36,8 +36,7 @@ import {
 import { CurrencyFormatter } from "@/components/currency-formatter"
 import { dispatchBalanceUpdate } from "@/lib/balance-updater"
 import { getCurrentLocation } from "@/lib/location-utils"
-import { UberAgentTrackingMap } from "@/components/uber-agent-tracking-map"
-import { GoogleMapsWrapper } from "@/components/google-maps-wrapper"
+import { BoltMapboxMap } from "@/components/bolt-mapbox-map"
 import { AgentReviewModal } from "@/components/agent-review-modal"
 import { PositionSmoother } from "@/lib/smooth-marker"
 import { PremiumPlacesAutocomplete } from "@/components/premium-places-autocomplete"
@@ -1197,36 +1196,46 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
           </Card>
         ) : (
           <div className="space-y-4">
-            {/* Map with agents - single initialization, no reloads */}
-            <div className="h-[500px] sm:h-[600px] lg:h-[700px] w-full relative z-0">
-              <GoogleMapsWrapper
-                  userLocation={userCoordinates}
-                  agents={nearbyAgents.map(agent => ({
-                    id: agent.id,
-                    name: agent.name,
-                    phone: agent.phone,
-                    location: agent.location,
-                    rating: agent.rating,
-                    totalTransactions: agent.totalTransactions,
-                    distance: agent.distance || 0,
-                    distanceFormatted: agent.distanceFormatted || "0m",
-                  }))}
-                  selectedAgent={selectedAgent ? { id: selectedAgent.id } : null}
-                  onSelectAgent={(agent) => {
-                    handleAgentSelect({
-                      id: agent.id,
-                      name: agent.name,
-                      phone: agent.phone,
-                      location: agent.location,
-                      rating: agent.rating,
-                      totalTransactions: agent.totalTransactions,
-                      distance: agent.distance || 0,
-                      distanceFormatted: agent.distanceFormatted || "0m",
-                    })
-                  }}
-                  showRoute={false}
-                />
-            </div>
+            {/* Bolt-style Mapbox Map with agents - smooth vector-based rendering */}
+            <BoltMapboxMap
+              userLocation={userCoordinates}
+              agents={nearbyAgents.map(agent => ({
+                id: agent.id,
+                name: agent.name,
+                phone: agent.phone,
+                location: agent.location,
+                rating: agent.rating,
+                totalTransactions: agent.totalTransactions,
+                distance: agent.distance || 0,
+                distanceFormatted: agent.distanceFormatted || "0m",
+                isAvailable: true,
+              }))}
+              selectedAgent={selectedAgent ? {
+                id: selectedAgent.id,
+                name: selectedAgent.name,
+                phone: selectedAgent.phone,
+                location: selectedAgent.location,
+                rating: selectedAgent.rating,
+                totalTransactions: selectedAgent.totalTransactions,
+                distance: selectedAgent.distance || 0,
+                distanceFormatted: selectedAgent.distanceFormatted || "0m",
+              } : null}
+              onSelectAgent={(agent) => {
+                handleAgentSelect({
+                  id: agent.id,
+                  name: agent.name,
+                  phone: agent.phone,
+                  location: agent.location,
+                  rating: agent.rating,
+                  totalTransactions: agent.totalTransactions,
+                  distance: agent.distance || 0,
+                  distanceFormatted: agent.distanceFormatted || "0m",
+                })
+              }}
+              showRoute={false}
+              height="600px"
+              className="rounded-2xl overflow-hidden"
+            />
             
             {/* Real-time distance updates for agents */}
             {nearbyAgents.length > 0 && userCoordinates && (
@@ -1757,41 +1766,58 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
                   )}
                 </CardHeader>
                 <CardContent className="p-0">
-                  <div style={{ height: "500px", width: "100%" }} className="sm:h-[600px] lg:h-[700px]">
-                    <GoogleMapsWrapper
-                      userLocation={userCoordinates}
-                      agents={request?.agent ? [{
-                        id: request.agent.id,
-                        name: request.agent.name,
-                        phone: request.agent.phone,
-                        location: agentRealTimeLocation || 
-                                 (request.agent.location && typeof request.agent.location === 'object' 
-                                  ? request.agent.location 
-                                  : userCoordinates), // Fallback to user location if agent location not available
-                        rating: request.agent.rating || 5.0,
-                        totalTransactions: 0,
-                        distance: agentDistance || 0,
-                        distanceFormatted: agentDistance !== null 
-                          ? (agentDistance < 1 
-                              ? `${Math.round(agentDistance * 1000)}m` 
-                              : `${agentDistance.toFixed(1)}km`)
-                          : "Calculating...",
-                      }] : []}
-                      selectedAgent={request?.agent ? {
-                        id: request.agent.id,
-                      } : null}
-                      onSelectAgent={() => {}}
-                      showRoute={step === "in_progress"}
-                      agentLocation={
-                        (step === "matched" || step === "in_progress") && agentRealTimeLocation
-                          ? agentRealTimeLocation
-                          : (request?.agent?.location && typeof request.agent.location === 'object'
-                            ? request.agent.location
-                            : null)
-                      }
-                      showMeetingPoint={showMeetingPoint}
-                    />
-                  </div>
+                  {/* Bolt-style Mapbox Map for real-time agent tracking */}
+                  <BoltMapboxMap
+                    userLocation={userCoordinates}
+                    agents={request?.agent ? [{
+                      id: request.agent.id,
+                      name: request.agent.name,
+                      phone: request.agent.phone,
+                      location: agentRealTimeLocation || 
+                               (request.agent.location && typeof request.agent.location === 'object' 
+                                ? request.agent.location 
+                                : userCoordinates),
+                      rating: request.agent.rating || 5.0,
+                      totalTransactions: 0,
+                      distance: agentDistance || 0,
+                      distanceFormatted: agentDistance !== null 
+                        ? (agentDistance < 1 
+                            ? `${Math.round(agentDistance * 1000)}m` 
+                            : `${agentDistance.toFixed(1)}km`)
+                        : "Calculating...",
+                      isAvailable: true,
+                    }] : []}
+                    selectedAgent={request?.agent ? {
+                      id: request.agent.id,
+                      name: request.agent.name,
+                      phone: request.agent.phone,
+                      location: agentRealTimeLocation || 
+                               (request.agent.location && typeof request.agent.location === 'object' 
+                                ? request.agent.location 
+                                : userCoordinates),
+                      rating: request.agent.rating || 5.0,
+                      totalTransactions: 0,
+                      distance: agentDistance || 0,
+                      distanceFormatted: agentDistance !== null 
+                        ? (agentDistance < 1 
+                            ? `${Math.round(agentDistance * 1000)}m` 
+                            : `${agentDistance.toFixed(1)}km`)
+                        : "Calculating...",
+                    } : null}
+                    onSelectAgent={() => {}}
+                    showRoute={step === "in_progress"}
+                    agentLocation={
+                      (step === "matched" || step === "in_progress") && agentRealTimeLocation
+                        ? agentRealTimeLocation
+                        : (request?.agent?.location && typeof request.agent.location === 'object'
+                          ? request.agent.location
+                          : null)
+                    }
+                    etaSeconds={etaSeconds}
+                    etaFormatted={etaFormatted}
+                    requestStatus={step}
+                    height="600px"
+                  />
                 </CardContent>
               </Card>
             )}

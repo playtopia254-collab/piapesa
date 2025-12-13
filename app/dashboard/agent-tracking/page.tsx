@@ -8,9 +8,9 @@ import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import dynamic from "next/dynamic"
 
-// Dynamic import to avoid SSR issues with Google Maps
-const UberAgentTrackingMap = dynamic(
-  () => import("@/components/uber-agent-tracking-map").then((mod) => ({ default: mod.UberAgentTrackingMap })),
+// Dynamic import to avoid SSR issues with Mapbox
+const BoltAgentTrackingMap = dynamic(
+  () => import("@/components/bolt-agent-tracking-map").then((mod) => ({ default: mod.BoltAgentTrackingMap })),
   {
     ssr: false,
     loading: () => (
@@ -18,7 +18,7 @@ const UberAgentTrackingMap = dynamic(
         <CardContent className="py-12">
           <div className="flex flex-col items-center justify-center">
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mb-4" />
-            <p className="text-muted-foreground">Loading agent tracking map...</p>
+            <p className="text-muted-foreground">Loading Bolt-style map...</p>
           </div>
         </CardContent>
       </Card>
@@ -65,7 +65,7 @@ export default function AgentTrackingPage() {
             Live Agent Tracking
           </h1>
           <p className="text-muted-foreground">
-            Track available agents in real-time with Uber-like precision
+            Track available agents in real-time with Bolt-style premium maps
           </p>
         </div>
       </div>
@@ -97,8 +97,8 @@ export default function AgentTrackingPage() {
         </Card>
       )}
 
-      {/* Uber-like Tracking Map */}
-      <UberAgentTrackingMap
+      {/* Bolt-style Mapbox Tracking Map */}
+      <BoltAgentTrackingMap
         onSelectAgent={handleSelectAgent}
         selectedAgentId={selectedAgent?.id || null}
         height="600px"
@@ -121,12 +121,12 @@ export default function AgentTrackingPage() {
               </ul>
             </div>
             <div className="space-y-2">
-              <h4 className="font-semibold">Distance Calculation</h4>
+              <h4 className="font-semibold">Premium Mapbox Features</h4>
               <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                <li>Google Maps Geometry Library</li>
-                <li>Meter-level accuracy</li>
-                <li>Real-time distance updates</li>
-                <li>Automatic unit conversion (m/km)</li>
+                <li>Vector tiles - sharp at all zoom levels</li>
+                <li>60fps smooth animations</li>
+                <li>Custom SVG markers with no pixelation</li>
+                <li>GPU-accelerated rendering</li>
               </ul>
             </div>
           </div>

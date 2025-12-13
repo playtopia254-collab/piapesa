@@ -96,7 +96,9 @@ export default function AgentDashboardPage() {
   const locationWatchIdRef = useRef<number | null>(null)
   const isGettingLocationRef = useRef(false) // Prevent duplicate GPS requests
   const locationPermissionDeniedRef = useRef(false) // Track permission denial
-  const ACCURACY_THRESHOLD = 100 // Agent must have ≤100m accuracy to go online
+  const receivedAnyPositionRef = useRef(false) // Track if any GPS position was received
+  const ACCURACY_THRESHOLD = 150 // Agent must have ≤150m accuracy to go online (relaxed for reliability)
+  const GPS_TIMEOUT = 40000 // 40 seconds timeout for GPS accuracy check
   const [stats, setStats] = useState({
     activeRequests: 0,
     pendingRequests: 0,
@@ -264,6 +266,7 @@ export default function AgentDashboardPage() {
 
     // Reset flags
     locationPermissionDeniedRef.current = false
+    receivedAnyPositionRef.current = false
     isGettingLocationRef.current = true
 
     setIsWaitingForAccuracy(true)
@@ -294,13 +297,14 @@ export default function AgentDashboardPage() {
 
         // Permission is granted if we got a position
         locationPermissionDeniedRef.current = false
+        receivedAnyPositionRef.current = true // Track that we received at least one position
 
         setGpsAccuracy(accuracy)
         setAgentLocation({ lat, lng })
 
         console.log(`📍 Agent GPS: ±${Math.round(accuracy)}m at ${lat}, ${lng}`)
 
-        // Only go online when accuracy ≤ 100m
+        // Only go online when accuracy ≤ 150m
         if (accuracy <= ACCURACY_THRESHOLD && !isAvailable) {
           // Accuracy is good - mark agent online
           markAgentOnline({ lat, lng, accuracy })
@@ -347,23 +351,39 @@ export default function AgentDashboardPage() {
 
     locationWatchIdRef.current = watchId
 
-    // Timeout after 20 seconds if accuracy never reaches threshold
+    // Timeout after 40 seconds if accuracy never reaches threshold
     setTimeout(() => {
-      if (gpsAccuracy === null || (gpsAccuracy !== null && gpsAccuracy > ACCURACY_THRESHOLD)) {
-        if (typeof window !== "undefined" && navigator.geolocation && watchId !== null) {
-          navigator.geolocation.clearWatch(watchId)
-        }
-        setIsWaitingForAccuracy(false)
-        isGettingLocationRef.current = false
-        if (locationPermissionDeniedRef.current) {
-          setError(
-            "Location permission denied. Please allow location in your browser's site settings, ensure HTTPS, and try again."
-          )
+      // Only trigger timeout if still waiting (not already online)
+      if (!isGettingLocationRef.current) return
+      
+      if (typeof window !== "undefined" && navigator.geolocation && watchId !== null) {
+        navigator.geolocation.clearWatch(watchId)
+      }
+      setIsWaitingForAccuracy(false)
+      isGettingLocationRef.current = false
+      
+      // Only show error if permission was denied OR no positions arrived at all
+      if (locationPermissionDeniedRef.current) {
+        setError(
+          "Location permission denied. Please allow location in your browser's site settings, ensure HTTPS, and try again."
+        )
+      } else if (!receivedAnyPositionRef.current) {
+        setError("No GPS signal received. Please enable location permissions and try again.")
+      } else {
+        // We received positions but accuracy never reached threshold - use best location anyway
+        // This is a soft fallback - just mark online with whatever accuracy we have
+        if (agentLocation) {
+          console.log(`⚠️ GPS timeout with accuracy ${gpsAccuracy}m - going online anyway`)
+          markAgentOnline({ 
+            lat: agentLocation.lat, 
+            lng: agentLocation.lng, 
+            accuracy: gpsAccuracy || 200 
+          })
         } else {
-          setError("Still trying to get a precise GPS fix. Move closer to a window or outside, then try again.")
+          setError("GPS signal too weak. Move closer to a window or outside, then try again.")
         }
       }
-    }, 20000)
+    }, GPS_TIMEOUT)
   }
 
   // Mark agent online (only called when accuracy ≤ 100m)

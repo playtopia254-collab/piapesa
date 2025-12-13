@@ -514,8 +514,8 @@ export function BoltMapboxMap({
        */
       map.current = new mapboxgl.Map({
         container: mapContainer.current,
-        // Mapbox light style - clean and minimal
-        style: "mapbox://styles/mapbox/light-v11",
+        // Mapbox streets style - shows buildings, roads, landmarks like Bolt
+        style: "mapbox://styles/mapbox/streets-v12",
         center: initialCenter,
         zoom: CAMERA_CONFIG.defaultZoom,
         minZoom: CAMERA_CONFIG.minZoom,
@@ -554,59 +554,39 @@ export function BoltMapboxMap({
         if (!map.current) return
         
         /**
-         * 🎨 REFINED STYLE MODIFICATIONS
+         * 🎨 MINIMAL STYLE ADJUSTMENTS
          * 
-         * Keep major street names visible for navigation
-         * Only hide small POIs (shops, restaurants)
-         * Keep transit and road labels for orientation
+         * Keep the streets-v12 style mostly intact for full visibility.
+         * Only hide small shop/restaurant labels to reduce clutter.
+         * Buildings, roads, landmarks all remain visible.
          */
         
-        // Only hide small POI labels (shops, restaurants) - keep landmarks
+        // Only reduce small POI labels slightly (shops, restaurants) - keep everything else
         if (map.current?.getLayer("poi-label")) {
-          // Filter to only show important POIs (parks, hospitals, schools, etc.)
           try {
+            // Filter out only very small POIs, keep everything important
             map.current.setFilter("poi-label", [
-              "match",
-              ["get", "class"],
-              ["park", "hospital", "school", "college", "stadium", "airport", "bus_station", "railway"],
-              true,
-              false
+              "any",
+              ["==", ["get", "class"], "park"],
+              ["==", ["get", "class"], "hospital"],
+              ["==", ["get", "class"], "school"],
+              ["==", ["get", "class"], "college"],
+              ["==", ["get", "class"], "stadium"],
+              ["==", ["get", "class"], "airport"],
+              ["==", ["get", "class"], "bus_station"],
+              ["==", ["get", "class"], "railway"],
+              ["==", ["get", "class"], "lodging"],
+              ["==", ["get", "class"], "place_of_worship"],
+              ["==", ["get", "class"], "bank"],
+              ["==", ["get", "class"], "fuel"],
+              ["==", ["get", "class"], "parking"],
+              [">=", ["get", "sizerank"], 14], // Show larger POIs
             ])
           } catch (e) {
-            // If filter fails, just reduce opacity
-            map.current.setPaintProperty("poi-label", "text-opacity", 0.6)
+            // Keep all POIs if filter fails
+            console.log("POI filter not applied, keeping all POIs")
           }
         }
-
-        // Make water more subtle but visible
-        if (map.current.getLayer("water")) {
-          map.current.setPaintProperty("water", "fill-color", "#dbeafe")
-        }
-
-        // Make parks subtle
-        const parkLayers = ["landuse", "park"]
-        parkLayers.forEach((layer) => {
-          if (map.current?.getLayer(layer)) {
-            try {
-              map.current.setPaintProperty(layer, "fill-color", "#dcfce7")
-              map.current.setPaintProperty(layer, "fill-opacity", 0.6)
-            } catch (e) {
-              // Layer might not support these properties
-            }
-          }
-        })
-        
-        // Enhance road labels for better visibility
-        const roadLabelLayers = ["road-label", "road-number-shield"]
-        roadLabelLayers.forEach((layer) => {
-          if (map.current?.getLayer(layer)) {
-            try {
-              map.current.setPaintProperty(layer, "text-color", "#1f2937")
-            } catch (e) {
-              // Layer might not support this
-            }
-          }
-        })
 
         // Add route source and layer (will be populated when route is needed)
         map.current.addSource("route", {
@@ -1004,7 +984,7 @@ export function BoltMapboxMap({
     
     map.current.setStyle(
       newStyle === "light"
-        ? "mapbox://styles/mapbox/light-v11"
+        ? "mapbox://styles/mapbox/streets-v12"
         : "mapbox://styles/mapbox/satellite-streets-v12"
     )
   }, [mapStyle])

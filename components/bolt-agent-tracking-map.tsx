@@ -355,7 +355,8 @@ export function BoltAgentTrackingMap({
 
       map.current = new mapboxgl.Map({
         container: mapContainer.current,
-        style: "mapbox://styles/mapbox/light-v11",
+        // Streets style shows buildings, roads, and landmarks like Bolt
+        style: "mapbox://styles/mapbox/streets-v12",
         center: [userLocation.lng, userLocation.lat],
         zoom: CAMERA_CONFIG.defaultZoom,
         minZoom: CAMERA_CONFIG.minZoom,
@@ -378,39 +379,32 @@ export function BoltAgentTrackingMap({
       map.current.on("load", () => {
         if (!map.current) return
 
-        // Only hide small POI labels (shops, restaurants) - keep important landmarks
+        // Minimal adjustments - keep streets-v12 style mostly intact
+        // Only filter out very small POIs (tiny shops) to reduce clutter
         if (map.current?.getLayer("poi-label")) {
           try {
-            // Filter to only show important POIs
             map.current.setFilter("poi-label", [
-              "match",
-              ["get", "class"],
-              ["park", "hospital", "school", "college", "stadium", "airport", "bus_station", "railway"],
-              true,
-              false
+              "any",
+              ["==", ["get", "class"], "park"],
+              ["==", ["get", "class"], "hospital"],
+              ["==", ["get", "class"], "school"],
+              ["==", ["get", "class"], "college"],
+              ["==", ["get", "class"], "stadium"],
+              ["==", ["get", "class"], "airport"],
+              ["==", ["get", "class"], "bus_station"],
+              ["==", ["get", "class"], "railway"],
+              ["==", ["get", "class"], "lodging"],
+              ["==", ["get", "class"], "place_of_worship"],
+              ["==", ["get", "class"], "bank"],
+              ["==", ["get", "class"], "fuel"],
+              ["==", ["get", "class"], "parking"],
+              [">=", ["get", "sizerank"], 14],
             ])
           } catch (e) {
-            // If filter fails, just reduce opacity
-            map.current.setPaintProperty("poi-label", "text-opacity", 0.5)
+            // Keep all POIs if filter fails
+            console.log("POI filter not applied")
           }
         }
-
-        // Subtle water
-        if (map.current.getLayer("water")) {
-          map.current.setPaintProperty("water", "fill-color", "#dbeafe")
-        }
-        
-        // Enhance road labels - make them more visible
-        const roadLabelLayers = ["road-label", "road-number-shield"]
-        roadLabelLayers.forEach((layer) => {
-          if (map.current?.getLayer(layer)) {
-            try {
-              map.current.setPaintProperty(layer, "text-color", "#1f2937")
-            } catch (e) {
-              // Layer might not support this
-            }
-          }
-        })
 
         setMapLoaded(true)
       })

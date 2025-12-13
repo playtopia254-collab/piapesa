@@ -39,61 +39,29 @@ const defaultCenter = {
   lng: 36.8219,
 }
 
-// Bolt-style map theme - colorful with visible buildings like Bolt app
-// This keeps buildings, roads, and landmarks visible while reducing clutter
+// Bolt-style map - MINIMAL styling to keep Google Maps detail visible
+// Only customize roads and hide small business clutter
 const boltMapStyle: google.maps.MapTypeStyle[] = [
-  // Keep default colors for buildings (tan/beige) - DON'T change geometry color
-  
-  // Roads - white with light grey borders (like Bolt)
+  // Roads - white like Bolt (this is the main visual change)
   { featureType: "road", elementType: "geometry.fill", stylers: [{ color: "#ffffff" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#e8e8e8" }] },
   { featureType: "road.highway", elementType: "geometry.fill", stylers: [{ color: "#ffffff" }] },
-  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#d4d4d4" }] },
   { featureType: "road.arterial", elementType: "geometry.fill", stylers: [{ color: "#ffffff" }] },
+  { featureType: "road.local", elementType: "geometry.fill", stylers: [{ color: "#ffffff" }] },
   
-  // Road labels - dark and readable
-  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#333333" }] },
-  { featureType: "road", elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }, { weight: 3 }] },
-  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#1a1a1a" }] },
-  { featureType: "road.arterial", elementType: "labels.text.fill", stylers: [{ color: "#1a1a1a" }] },
+  // Only hide small business labels (shops, restaurants) - keep everything else
+  { featureType: "poi.business", stylers: [{ visibility: "off" }] },
   
-  // Area/locality names - prominent
-  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#1a1a1a" }] },
-  { featureType: "administrative.neighborhood", elementType: "labels.text.fill", stylers: [{ color: "#333333" }] },
+  // Keep all other POIs visible (malls, hospitals, schools, etc.)
+  { featureType: "poi.attraction", stylers: [{ visibility: "on" }] },
+  { featureType: "poi.government", stylers: [{ visibility: "on" }] },
+  { featureType: "poi.medical", stylers: [{ visibility: "on" }] },
+  { featureType: "poi.park", stylers: [{ visibility: "on" }] },
+  { featureType: "poi.place_of_worship", stylers: [{ visibility: "on" }] },
+  { featureType: "poi.school", stylers: [{ visibility: "on" }] },
+  { featureType: "poi.sports_complex", stylers: [{ visibility: "on" }] },
   
-  // Parks - visible green
-  { featureType: "poi.park", elementType: "geometry.fill", stylers: [{ color: "#c5e1a5" }] },
-  { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#2e7d32" }] },
-  
-  // Water - visible blue
-  { featureType: "water", elementType: "geometry.fill", stylers: [{ color: "#b3d9f5" }] },
-  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#1565c0" }] },
-  
-  // Buildings - keep visible with slight emphasis
-  { featureType: "building", elementType: "geometry.fill", stylers: [{ color: "#e8e4df" }] },
-  { featureType: "building", elementType: "geometry.stroke", stylers: [{ color: "#d5d0ca" }] },
-  
-  // Landscape - light tan/cream background
-  { featureType: "landscape", elementType: "geometry.fill", stylers: [{ color: "#f0ede8" }] },
-  
-  // Keep all POI labels visible (malls, hotels, hospitals, etc.)
-  { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#6b6b6b" }] },
-  { featureType: "poi", elementType: "labels.icon", stylers: [{ visibility: "on" }] },
-  
-  // Shopping/malls - pink labels like Bolt
-  { featureType: "poi.shopping_mall", elementType: "labels.text.fill", stylers: [{ color: "#d81b60" }] },
-  { featureType: "poi.shopping_mall", elementType: "labels.icon", stylers: [{ visibility: "on" }] },
-  
-  // Hotels/lodging - pink labels like Bolt
-  { featureType: "poi.lodging", elementType: "labels.text.fill", stylers: [{ color: "#d81b60" }] },
-  
-  // Transit - visible
-  { featureType: "transit", elementType: "labels.icon", stylers: [{ visibility: "on" }] },
-  { featureType: "transit.station", elementType: "labels.text.fill", stylers: [{ color: "#1565c0" }] },
-  
-  // Only hide small business POIs that clutter the map
-  { featureType: "poi.business", elementType: "labels.icon", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.business", elementType: "labels.text", stylers: [{ visibility: "off" }] },
+  // Transit visible
+  { featureType: "transit", stylers: [{ visibility: "on" }] },
 ]
 
 // Format distance for display

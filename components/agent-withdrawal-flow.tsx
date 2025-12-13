@@ -166,37 +166,39 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
     try {
       // STEP 1: Request browser permission (MANDATORY - unlocks sensors)
       // This must be done first to unlock GPS sensors
-      await new Promise<void>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(
-          () => {
-            // Permission granted - sensors unlocked
-            resolve()
-          },
-          (error) => {
-            // Permission denied or error
-            let errorMessage = ""
-            switch (error.code) {
-              case error.PERMISSION_DENIED:
-                errorMessage = "Location permission denied. Please enable location in your browser settings and set Location Mode to 'High Accuracy'."
-                break
-              case error.POSITION_UNAVAILABLE:
-                errorMessage = "Location unavailable. Please check your GPS/WiFi settings and enable High Accuracy mode."
-                break
-              case error.TIMEOUT:
-                errorMessage = "Location request timed out. Please ensure High Accuracy mode is enabled."
-                break
-              default:
-                errorMessage = "Could not get location. Please ensure location services are enabled."
+      // Timeout is OK - we'll continue anyway
+      try {
+        await new Promise<void>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(
+            () => {
+              // Permission granted - sensors unlocked
+              resolve()
+            },
+            (error) => {
+              // Only reject on permission denied - timeout is OK, we'll continue
+              if (error.code === error.PERMISSION_DENIED) {
+                reject(new Error("Location permission denied. Please enable location in your browser settings and set Location Mode to 'High Accuracy'."))
+              } else if (error.code === error.POSITION_UNAVAILABLE) {
+                // Position unavailable - continue anyway, might work with Google API
+                resolve()
+              } else {
+                // Timeout or other error - continue anyway
+                resolve()
+              }
+            },
+            {
+              enableHighAccuracy: true,
+              timeout: 10000, // Shorter timeout - don't wait too long
+              maximumAge: 0
             }
-            reject(new Error(errorMessage))
-          },
-          {
-            enableHighAccuracy: true,
-            timeout: 20000,
-            maximumAge: 0
-          }
-        )
-      })
+          )
+        })
+      } catch (permissionError) {
+        // Only fail on permission denied
+        setIsGettingLocation(false)
+        setError(permissionError instanceof Error ? permissionError.message : "Location permission denied")
+        return null
+      }
 
       // Permission granted - now try Google Geolocation API
       setLocationStatus("Getting precise location...")
@@ -310,36 +312,27 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
               return
             }
             
-            // No location - show error
-            let errorMessage = ""
-            switch (error.code) {
-              case error.PERMISSION_DENIED:
-                errorMessage = "Location permission denied. Please enable location in your browser settings."
-                break
-              case error.POSITION_UNAVAILABLE:
-                errorMessage = "Location unavailable. Please check your GPS/WiFi settings."
-                break
-              case error.TIMEOUT:
-                // Timeout - use best location if we have one
-                if (bestLocation) {
-                  resolved = true
-                  setIsGettingLocation(false)
-                  setLocationStatus("Location found! (±" + Math.round(bestLocation.accuracy) + "m)")
-                  if (watchId !== null) navigator.geolocation.clearWatch(watchId)
-                  resolve(bestLocation)
-                  return
-                }
-                errorMessage = "Location request timed out. Please ensure High Accuracy mode is enabled."
-                break
-              default:
-                errorMessage = "Could not get location. Please ensure location services are enabled."
+            // No location - only show error for permission denied
+            // Timeout and other errors are OK - we'll keep trying or use best location
+            if (error.code === error.PERMISSION_DENIED) {
+              resolved = true
+              setIsGettingLocation(false)
+              setError("Location permission denied. Please enable location in your browser settings.")
+              if (watchId !== null) navigator.geolocation.clearWatch(watchId)
+              resolve(null)
+              return
             }
             
-            resolved = true
-            setIsGettingLocation(false)
-            setError(errorMessage)
-            if (watchId !== null) navigator.geolocation.clearWatch(watchId)
-            resolve(null)
+            // For timeout or other errors, just keep trying or use best location
+            // Don't show error - just continue
+            if (bestLocation) {
+              resolved = true
+              setIsGettingLocation(false)
+              setLocationStatus("Location found! (±" + Math.round(bestLocation.accuracy) + "m)")
+              if (watchId !== null) navigator.geolocation.clearWatch(watchId)
+              resolve(bestLocation)
+            }
+            // If no best location, just continue watching - don't resolve yet
           },
           {
             enableHighAccuracy: true, // Use GPS, not just network

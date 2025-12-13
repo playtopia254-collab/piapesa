@@ -259,8 +259,8 @@ export default function AgentDashboardPage() {
     return `${distance.toFixed(1)}km`
   }
 
-  // Start GPS accuracy check before going online
-  const startAccuracyCheck = () => {
+  // Start GPS accuracy check before going online - Gold Standard Flow
+  const startAccuracyCheck = async () => {
     if (!user?.id || isAvailable) return
     // Prevent duplicate GPS requests
     if (isWaitingForAccuracy || isGettingLocationRef.current) return
@@ -289,27 +289,98 @@ export default function AgentDashboardPage() {
       return
     }
 
-    // Watch GPS position with high accuracy
+    // STEP 1: Request permission first (unlocks sensors)
+    try {
+      await new Promise<void>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+          () => resolve(), // Permission granted
+          (error) => {
+            // Only reject on permission denied
+            if (error.code === error.PERMISSION_DENIED) {
+              locationPermissionDeniedRef.current = true
+              reject(new Error("Location permission denied. Please enable location in your browser settings."))
+            } else {
+              // Timeout or other error - continue anyway
+              resolve()
+            }
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+          }
+        )
+      })
+    } catch (permissionError) {
+      setIsWaitingForAccuracy(false)
+      isGettingLocationRef.current = false
+      setError(permissionError instanceof Error ? permissionError.message : "Location permission denied")
+      return
+    }
+
+    // STEP 2: Try Google Geolocation API (more accurate)
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+    if (apiKey) {
+      try {
+        const response = await fetch(
+          `https://www.googleapis.com/geolocation/v1/geolocate?key=${apiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ considerIp: true })
+          }
+        )
+
+        if (response.ok) {
+          const data = await response.json()
+          if (data.location && data.accuracy) {
+            const lat = data.location.lat
+            const lng = data.location.lng
+            const accuracy = data.accuracy
+
+            setGpsAccuracy(accuracy)
+            setAgentLocation({ lat, lng })
+            receivedAnyPositionRef.current = true
+
+            // If accuracy is good, go online immediately
+            if (accuracy <= ACCURACY_THRESHOLD) {
+              markAgentOnline({ lat, lng, accuracy })
+              setIsWaitingForAccuracy(false)
+              isGettingLocationRef.current = false
+              return
+            }
+          }
+        }
+      } catch (error) {
+        console.log("Google Geolocation API not available, using browser GPS")
+      }
+    }
+
+    // STEP 3: Fallback to watchPosition (continuous GPS tracking)
+    let bestLocation: { lat: number; lng: number; accuracy: number } | null = null
+    
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
         const accuracy = position.coords.accuracy
         const lat = position.coords.latitude
         const lng = position.coords.longitude
 
-        // Permission is granted if we got a position
         locationPermissionDeniedRef.current = false
-        receivedAnyPositionRef.current = true // Track that we received at least one position
+        receivedAnyPositionRef.current = true
 
         setGpsAccuracy(accuracy)
         setAgentLocation({ lat, lng })
 
+        // Track best location
+        if (!bestLocation || accuracy < bestLocation.accuracy) {
+          bestLocation = { lat, lng, accuracy }
+        }
+
         console.log(`📍 Agent GPS: ±${Math.round(accuracy)}m at ${lat}, ${lng}`)
 
-        // Only go online when accuracy ≤ 150m
+        // Go online when accuracy ≤ threshold
         if (accuracy <= ACCURACY_THRESHOLD && !isAvailable) {
-          // Accuracy is good - mark agent online
           markAgentOnline({ lat, lng, accuracy })
-          // Stop watching (will restart for background updates)
           if (typeof window !== "undefined" && navigator.geolocation && watchId !== null) {
             navigator.geolocation.clearWatch(watchId)
           }
@@ -318,43 +389,27 @@ export default function AgentDashboardPage() {
         }
       },
       (error) => {
-        console.error("GPS watch error:", error)
-
-        // Check for permission denial
-        const message = error?.message || ""
-        const isDenied =
-          error?.code === error.PERMISSION_DENIED ||
-          message.toLowerCase().includes("permission") ||
-          message.toLowerCase().includes("denied")
-
-        if (isDenied) {
+        // Only show error for permission denied
+        // Timeout and other errors are OK - we'll use best location
+        if (error.code === error.PERMISSION_DENIED) {
           locationPermissionDeniedRef.current = true
-          setError(
-            "Location permission denied. Please allow location in your browser's site settings, ensure HTTPS, and try again."
-          )
-        } else {
-          setError("Couldn't get a GPS fix. Move near a window/outside and try again.")
+          setError("Location permission denied. Please enable location in your browser settings.")
+          setIsWaitingForAccuracy(false)
+          isGettingLocationRef.current = false
         }
-
-        setIsWaitingForAccuracy(false)
-        isGettingLocationRef.current = false
-        if (typeof window !== "undefined" && navigator.geolocation && locationWatchIdRef.current !== null) {
-          navigator.geolocation.clearWatch(locationWatchIdRef.current)
-          locationWatchIdRef.current = null
-        }
+        // Don't show timeout or other errors - just keep trying
       },
       {
         enableHighAccuracy: true,
-        maximumAge: 0, // Always get fresh location
-        timeout: 10000,
+        maximumAge: 0,
+        timeout: 30000, // Long timeout - no rush
       }
     )
 
     locationWatchIdRef.current = watchId
 
-    // Timeout after 40 seconds if accuracy never reaches threshold
+    // Timeout after max time - use best location we have
     setTimeout(() => {
-      // Only trigger timeout if still waiting (not already online)
       if (!isGettingLocationRef.current) return
       
       if (typeof window !== "undefined" && navigator.geolocation && watchId !== null) {
@@ -363,26 +418,22 @@ export default function AgentDashboardPage() {
       setIsWaitingForAccuracy(false)
       isGettingLocationRef.current = false
       
-      // Only show error if permission was denied OR no positions arrived at all
+      // Only show error if permission denied or no location at all
       if (locationPermissionDeniedRef.current) {
-        setError(
-          "Location permission denied. Please allow location in your browser's site settings, ensure HTTPS, and try again."
-        )
+        setError("Location permission denied. Please enable location in your browser settings.")
       } else if (!receivedAnyPositionRef.current) {
         setError("No GPS signal received. Please enable location permissions and try again.")
-      } else {
-        // We received positions but accuracy never reached threshold - use best location anyway
-        // This is a soft fallback - just mark online with whatever accuracy we have
-        if (agentLocation) {
-          console.log(`⚠️ GPS timeout with accuracy ${gpsAccuracy}m - going online anyway`)
-          markAgentOnline({ 
-            lat: agentLocation.lat, 
-            lng: agentLocation.lng, 
-            accuracy: gpsAccuracy || 200 
-          })
-        } else {
-          setError("GPS signal too weak. Move closer to a window or outside, then try again.")
-        }
+      } else if (bestLocation) {
+        // Use best location we have - go online anyway
+        console.log(`⚠️ Using best GPS location: ±${Math.round(bestLocation.accuracy)}m`)
+        markAgentOnline(bestLocation)
+      } else if (agentLocation) {
+        // Use current location
+        markAgentOnline({ 
+          lat: agentLocation.lat, 
+          lng: agentLocation.lng, 
+          accuracy: gpsAccuracy || 200 
+        })
       }
     }, GPS_TIMEOUT)
   }

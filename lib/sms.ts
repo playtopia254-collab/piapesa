@@ -7,27 +7,59 @@ export function generateOTP(): string {
 }
 
 // Store OTP with expiration (59 seconds) in MongoDB
-export async function storeOTP(phone: string, code: string): Promise<void> {
+export async function storeOTP(phone: string, code: string, userId?: string): Promise<void> {
   try {
     const db = await getDb()
     const otpsCollection = db.collection("otps")
     
     const expiresAt = new Date(Date.now() + 59 * 1000) // 59 seconds from now
     
-    // Store OTP in database (upsert to replace any existing OTP for this phone)
+    // Normalize phone to consistent format for storage
+    let normalizedPhone = phone.trim()
+    if (normalizedPhone.startsWith("0")) {
+      normalizedPhone = "+254" + normalizedPhone.slice(1)
+    } else if (normalizedPhone.startsWith("254")) {
+      normalizedPhone = "+" + normalizedPhone
+    } else if (!normalizedPhone.startsWith("+254")) {
+      normalizedPhone = "+254" + normalizedPhone
+    }
+    
+    // Store OTP in database with phone and userId (if provided)
+    // This ensures OTPs are tied to specific users
     await otpsCollection.updateOne(
-      { phone: phone },
+      { phone: normalizedPhone },
       {
         $set: {
           code: code,
+          phone: normalizedPhone, // Store normalized phone
+          userId: userId || null, // Store userId if available
           expiresAt: expiresAt,
           createdAt: new Date(),
+          used: false, // Track if OTP has been used
         },
       },
       { upsert: true }
     )
     
-    console.log(`💾 OTP stored in DB for ${phone}: ${code} (expires at ${expiresAt.toISOString()})`)
+    // Also store with alternative format for backward compatibility
+    const phoneWithoutPlus = normalizedPhone.replace(/^\+/, "")
+    await otpsCollection.updateOne(
+      { phone: phoneWithoutPlus },
+      {
+        $set: {
+          code: code,
+          phone: normalizedPhone, // Store normalized phone as primary
+          phoneAlt: phoneWithoutPlus, // Store alternative format
+          userId: userId || null,
+          expiresAt: expiresAt,
+          createdAt: new Date(),
+          used: false,
+        },
+      },
+      { upsert: true }
+    )
+    
+    console.log(`💾 OTP stored in DB for ${normalizedPhone}${userId ? ` (userId: ${userId})` : ""}: ${code} (expires at ${expiresAt.toISOString()})`)
     
     // Clean up expired OTPs in background (don't wait for it)
     otpsCollection.deleteMany({ expiresAt: { $lt: new Date() } }).catch(console.error)
@@ -37,40 +69,88 @@ export async function storeOTP(phone: string, code: string): Promise<void> {
   }
 }
 
-// Verify OTP from MongoDB
-export async function verifyOTP(phone: string, code: string): Promise<boolean> {
+// Verify OTP from MongoDB - ensures phone number matches exactly
+export async function verifyOTP(phone: string, code: string, userId?: string): Promise<boolean> {
   try {
     console.log("=".repeat(80))
     console.log("🔍 OTP VERIFICATION DEBUG")
     console.log("=".repeat(80))
     console.log("Verifying with phone:", phone)
     console.log("Verifying with code:", code)
+    if (userId) console.log("Verifying with userId:", userId)
+    
+    // Normalize phone to consistent format
+    let normalizedPhone = phone.trim()
+    if (normalizedPhone.startsWith("0")) {
+      normalizedPhone = "+254" + normalizedPhone.slice(1)
+    } else if (normalizedPhone.startsWith("254")) {
+      normalizedPhone = "+" + normalizedPhone
+    } else if (!normalizedPhone.startsWith("+254")) {
+      normalizedPhone = "+254" + normalizedPhone
+    }
     
     const db = await getDb()
     const otpsCollection = db.collection("otps")
     
-    // Try to find OTP with the phone number
-    let stored = await otpsCollection.findOne({ phone: phone })
-    
-    // If not found, try alternative formats
-    if (!stored) {
-      const phoneWithoutPlus = phone.replace(/^\+/, "")
-      stored = await otpsCollection.findOne({ phone: phoneWithoutPlus })
+    // Find OTP - must match phone number exactly (normalized)
+    // Also check userId if provided for additional security
+    let query: any = {
+      $or: [
+        { phone: normalizedPhone },
+        { phoneAlt: normalizedPhone },
+      ],
+      code: code,
+      used: { $ne: true }, // Not already used
     }
     
+    // If userId is provided, also verify it matches
+    if (userId) {
+      query.userId = userId
+    }
+    
+    let stored = await otpsCollection.findOne(query)
+    
+    // If not found with userId, try without userId check (for backward compatibility with old OTPs)
     if (!stored) {
-      const phone254 = phone.startsWith("+254") ? phone.slice(1) : phone
-      stored = await otpsCollection.findOne({ phone: phone254 })
+      stored = await otpsCollection.findOne({
+        $or: [
+          { phone: normalizedPhone },
+          { phoneAlt: normalizedPhone },
+        ],
+        code: code,
+        used: { $ne: true },
+      })
     }
     
     console.log("Stored OTP data:", stored ? { 
       code: stored.code, 
+      phone: stored.phone,
+      userId: stored.userId,
       expiresAt: stored.expiresAt?.toISOString(), 
-      isExpired: stored.expiresAt ? new Date() > new Date(stored.expiresAt) : true 
+      isExpired: stored.expiresAt ? new Date() > new Date(stored.expiresAt) : true,
+      used: stored.used
     } : "NOT FOUND")
     
     if (!stored) {
-      console.log("❌ OTP not found for phone:", phone)
+      console.log("❌ OTP not found for phone:", normalizedPhone)
+      console.log("=".repeat(80))
+      return false
+    }
+    
+    // Verify phone number matches exactly (security check)
+    const storedPhone = stored.phone
+    const storedPhoneAlt = stored.phoneAlt
+    const phoneMatches = storedPhone === normalizedPhone || storedPhoneAlt === normalizedPhone
+    
+    if (!phoneMatches) {
+      console.log("❌ Phone number mismatch! Stored:", storedPhone, "Alt:", storedPhoneAlt, "Provided:", normalizedPhone)
+      console.log("=".repeat(80))
+      return false
+    }
+    
+    // If userId was provided, verify it matches (additional security layer)
+    if (userId && stored.userId && stored.userId !== userId) {
+      console.log("❌ User ID mismatch! Stored:", stored.userId, "Provided:", userId)
       console.log("=".repeat(80))
       return false
     }
@@ -83,12 +163,22 @@ export async function verifyOTP(phone: string, code: string): Promise<boolean> {
       return false
     }
     
+    // Check if already used
+    if (stored.used) {
+      console.log("❌ OTP already used")
+      console.log("=".repeat(80))
+      return false
+    }
+    
     // Verify code
     console.log("Comparing codes - Stored:", stored.code, "Provided:", code, "Match:", stored.code === code)
     if (stored.code === code) {
       console.log("✅ OTP verified successfully!")
-      // Remove after successful verification
-      await otpsCollection.deleteOne({ _id: stored._id })
+      // Mark as used instead of deleting (for audit trail)
+      await otpsCollection.updateOne(
+        { _id: stored._id },
+        { $set: { used: true, usedAt: new Date() } }
+      )
       console.log("=".repeat(80))
       return true
     }

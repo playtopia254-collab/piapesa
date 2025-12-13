@@ -27,6 +27,7 @@ import {
   Phone,
   Mail,
   Key,
+  LogOut,
 } from "lucide-react"
 import { mockApi, type User } from "@/lib/mock-api"
 import { PhoneFormatter } from "@/components/phone-formatter"
@@ -113,6 +114,8 @@ export default function SettingsPage() {
     message: string
   }>({ type: null, message: "" })
   const [isSaving, setIsSaving] = useState(false)
+  const [isOptingOut, setIsOptingOut] = useState(false)
+  const [showOptOutConfirm, setShowOptOutConfirm] = useState(false)
 
   useEffect(() => {
     const loadUser = async () => {
@@ -313,6 +316,52 @@ export default function SettingsPage() {
       setSaveStatus({ type: "error", message: "Failed to update agent settings. Please try again." })
     } finally {
       setIsSaving(false)
+      setTimeout(() => setSaveStatus({ type: null, message: "" }), 5000)
+    }
+  }
+
+  const handleOptOut = async () => {
+    if (!user || !user.isAgent) return
+
+    setIsOptingOut(true)
+    setSaveStatus({ type: null, message: "" })
+
+    try {
+      const response = await fetch("/api/agents/opt-out", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to opt out")
+      }
+
+      // Update session storage
+      if (data.user) {
+        const updatedUser = { ...user, ...data.user }
+        sessionStorage.setItem("currentUser", JSON.stringify(updatedUser))
+        setUser(updatedUser)
+      }
+
+      setSaveStatus({ type: "success", message: data.message || "You have successfully opted out of being an agent." })
+      setShowOptOutConfirm(false)
+      
+      // Redirect to dashboard after 2 seconds
+      setTimeout(() => {
+        router.push("/dashboard")
+      }, 2000)
+    } catch (error) {
+      setSaveStatus({ 
+        type: "error", 
+        message: error instanceof Error ? error.message : "Failed to opt out of being an agent" 
+      })
+    } finally {
+      setIsOptingOut(false)
       setTimeout(() => setSaveStatus({ type: null, message: "" }), 5000)
     }
   }
@@ -680,6 +729,66 @@ export default function SettingsPage() {
                 </>
               )}
             </Button>
+
+            <Separator className="my-6" />
+
+            {/* Opt Out Section */}
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-lg font-semibold text-destructive mb-2">Danger Zone</h3>
+                <p className="text-sm text-muted-foreground">
+                  Once you opt out, you will no longer receive withdrawal requests and will lose access to agent features.
+                </p>
+              </div>
+
+              {!showOptOutConfirm ? (
+                <Button
+                  variant="destructive"
+                  onClick={() => setShowOptOutConfirm(true)}
+                  className="w-full"
+                >
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Opt Out of Being an Agent
+                </Button>
+              ) : (
+                <div className="space-y-3 p-4 border border-destructive rounded-lg bg-destructive/5">
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      Are you sure you want to opt out? This action cannot be undone. You will need to register again to become an agent.
+                    </AlertDescription>
+                  </Alert>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="destructive"
+                      onClick={handleOptOut}
+                      disabled={isOptingOut}
+                      className="flex-1"
+                    >
+                      {isOptingOut ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Opting Out...
+                        </>
+                      ) : (
+                        <>
+                          <LogOut className="w-4 h-4 mr-2" />
+                          Yes, Opt Out
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowOptOutConfirm(false)}
+                      disabled={isOptingOut}
+                      className="flex-1"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}

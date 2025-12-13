@@ -301,13 +301,13 @@ export default function DashboardPage() {
 
       {/* Recent transactions */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-0">
           <div>
-            <CardTitle>Recent Transactions</CardTitle>
-            <CardDescription>Your latest money movements</CardDescription>
+            <CardTitle className="text-lg sm:text-xl">Recent Transactions</CardTitle>
+            <CardDescription className="text-xs sm:text-sm">Your latest money movements</CardDescription>
           </div>
-          <Link href="/dashboard/transactions">
-            <Button variant="outline" size="sm">
+          <Link href="/dashboard/transactions" className="w-full sm:w-auto">
+            <Button variant="outline" size="sm" className="w-full sm:w-auto">
               View All
             </Button>
           </Link>
@@ -322,18 +322,23 @@ export default function DashboardPage() {
               <p className="text-sm text-muted-foreground">Start by sending money or making a withdrawal</p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {transactions.map((transaction) => (
-                <div key={transaction.id} className="flex items-center justify-between py-2">
-                  <div className="flex items-center space-x-3">
-                    {getTransactionIcon(transaction)}
-                    <div>
-                      <p className="text-sm font-medium">{getTransactionDescription(transaction)}</p>
-                      <div className="flex items-center space-x-2 text-xs text-muted-foreground">
-                        <span>{transaction.network}</span>
-                        <span>•</span>
-                        <span>{new Date(transaction.createdAt).toLocaleDateString()}</span>
-                        <span>•</span>
+                <div 
+                  key={transaction.id} 
+                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 py-2 sm:py-2"
+                >
+                  <div className="flex items-start sm:items-center space-x-3 flex-1 min-w-0">
+                    <div className="flex-shrink-0 mt-0.5 sm:mt-0">
+                      {getTransactionIcon(transaction)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{getTransactionDescription(transaction)}</p>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground mt-0.5">
+                        <span className="whitespace-nowrap">{transaction.network}</span>
+                        <span className="hidden sm:inline">•</span>
+                        <span className="whitespace-nowrap">{new Date(transaction.createdAt).toLocaleDateString()}</span>
+                        <span className="hidden sm:inline">•</span>
                         <div className="flex items-center space-x-1">
                           {transaction.status === "completed" ? (
                             <CheckCircle className="w-3 h-3 text-green-500" />
@@ -345,9 +350,9 @@ export default function DashboardPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-left sm:text-right flex-shrink-0 sm:ml-4">
                     <p
-                      className={`text-sm font-medium ${
+                      className={`text-sm sm:text-base font-medium ${
                         getTransactionAmount(transaction) > 0 ? "text-green-600" : "text-red-600"
                       }`}
                     >

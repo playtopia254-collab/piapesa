@@ -145,6 +145,14 @@ export default function SignupPage() {
         throw new Error("OTP must be 6 digits")
       }
 
+      // Format phone number (same as in handleSubmit)
+      let phone = formData.phone.trim()
+      if (phone.startsWith("0")) {
+        phone = "+254" + phone.slice(1)
+      } else if (!phone.startsWith("+254")) {
+        phone = "+254" + phone
+      }
+
       // Verify OTP with API
       const response = await fetch("/api/auth/verify-otp", {
         method: "POST",

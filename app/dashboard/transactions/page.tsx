@@ -193,12 +193,13 @@ export default function TransactionsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Transaction History</h1>
-          <p className="text-muted-foreground">View and manage all your money movements</p>
+          <h1 className="text-xl sm:text-2xl font-bold">Transaction History</h1>
+          <p className="text-sm sm:text-base text-muted-foreground">View and manage all your money movements</p>
         </div>
-        <Button onClick={exportTransactions} variant="outline" size="sm">
+        <Button onClick={exportTransactions} variant="outline" size="sm" className="w-full sm:w-auto">
           <FileDown className="w-4 h-4 mr-2" />
-          Export CSV
+          <span className="hidden sm:inline">Export CSV</span>
+          <span className="sm:hidden">Export</span>
         </Button>
       </div>
 
@@ -211,7 +212,7 @@ export default function TransactionsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3">
             <div className="space-y-2">
               <label className="text-sm font-medium">Search</label>
               <div className="relative">
@@ -281,46 +282,49 @@ export default function TransactionsPage() {
               </p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {filteredTransactions.map((transaction) => (
                 <div
                   key={transaction.id}
-                  className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
+                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 sm:p-4 border border-border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
                   onClick={() => setSelectedTransaction(transaction)}
                 >
-                  <div className="flex items-center space-x-4">
-                    {getTransactionIcon(transaction)}
-                    <div>
-                      <p className="text-sm font-medium">{getTransactionDescription(transaction)}</p>
-                      <div className="flex items-center space-x-2 text-xs text-muted-foreground">
+                  <div className="flex items-start sm:items-center space-x-3 sm:space-x-4 flex-1 min-w-0">
+                    <div className="flex-shrink-0 mt-0.5 sm:mt-0">
+                      {getTransactionIcon(transaction)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{getTransactionDescription(transaction)}</p>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground mt-1">
                         <span className="flex items-center space-x-1">
                           <span>{getNetworkIcon(transaction.network)}</span>
-                          <span>{transaction.network}</span>
+                          <span className="hidden sm:inline">{transaction.network}</span>
+                          <span className="sm:hidden">{transaction.network.substring(0, 8)}</span>
                         </span>
-                        <span>•</span>
-                        <span>{new Date(transaction.createdAt).toLocaleDateString()}</span>
-                        <span>•</span>
+                        <span className="hidden sm:inline">•</span>
+                        <span className="whitespace-nowrap">{new Date(transaction.createdAt).toLocaleDateString()}</span>
+                        <span className="hidden sm:inline">•</span>
                         <div className="flex items-center space-x-1">
                           {getStatusIcon(transaction.status)}
                           <span className="capitalize">{transaction.status}</span>
                         </div>
                       </div>
                       {transaction.purpose && (
-                        <p className="text-xs text-muted-foreground mt-1">Purpose: {transaction.purpose}</p>
+                        <p className="text-xs text-muted-foreground mt-1 truncate">Purpose: {transaction.purpose}</p>
                       )}
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-left sm:text-right flex-shrink-0 sm:ml-4">
                     <p
-                      className={`text-sm font-medium ${
+                      className={`text-sm sm:text-base font-medium ${
                         getTransactionAmount(transaction) > 0 ? "text-green-600" : "text-red-600"
                       }`}
                     >
                       {getTransactionAmount(transaction) > 0 ? "+" : ""}
                       <CurrencyFormatter amount={getTransactionAmount(transaction)} />
                     </p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(transaction.createdAt).toLocaleTimeString()}
+                    <p className="text-xs text-muted-foreground sm:mt-0.5">
+                      {new Date(transaction.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
                 </div>
@@ -332,8 +336,8 @@ export default function TransactionsPage() {
 
       {/* Transaction Details Modal */}
       {selectedTransaction && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <Card className="w-full max-w-md">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <Card className="w-full max-w-md max-h-[90vh] overflow-y-auto">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Transaction Details</CardTitle>
@@ -344,25 +348,25 @@ export default function TransactionsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="bg-muted/50 p-4 rounded-lg space-y-3">
-                <div className="flex justify-between">
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
                   <span className="text-sm text-muted-foreground">Transaction ID</span>
-                  <span className="text-sm font-mono">{selectedTransaction.id}</span>
+                  <span className="text-sm font-mono break-all sm:break-normal">{selectedTransaction.id}</span>
                 </div>
                 {(selectedTransaction as any).sasapayTransactionCode && (
-                  <div className="flex justify-between">
+                  <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
                     <span className="text-sm text-muted-foreground">SasaPay Code</span>
-                    <span className="text-sm font-mono font-semibold">
+                    <span className="text-sm font-mono font-semibold break-all sm:break-normal">
                       {(selectedTransaction as any).sasapayTransactionCode}
                     </span>
                   </div>
                 )}
-                <div className="flex justify-between">
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
                   <span className="text-sm text-muted-foreground">Type</span>
-                  <Badge variant="outline" className="capitalize">
+                  <Badge variant="outline" className="capitalize w-fit">
                     {selectedTransaction.type}
                   </Badge>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
                   <span className="text-sm text-muted-foreground">Amount</span>
                   <span
                     className={`text-sm font-semibold ${
@@ -374,22 +378,22 @@ export default function TransactionsPage() {
                   </span>
                 </div>
                 {selectedTransaction.toPhone && (
-                  <div className="flex justify-between">
+                  <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
                     <span className="text-sm text-muted-foreground">To</span>
-                    <span className="text-sm">
+                    <span className="text-sm break-all sm:break-normal">
                       <PhoneFormatter phone={selectedTransaction.toPhone} />
                     </span>
                   </div>
                 )}
                 {selectedTransaction.fromPhone && (
-                  <div className="flex justify-between">
+                  <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
                     <span className="text-sm text-muted-foreground">From</span>
-                    <span className="text-sm">
+                    <span className="text-sm break-all sm:break-normal">
                       <PhoneFormatter phone={selectedTransaction.fromPhone} />
                     </span>
                   </div>
                 )}
-                <div className="flex justify-between">
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
                   <span className="text-sm text-muted-foreground">Network</span>
                   <div className="flex items-center space-x-1">
                     <span className="text-sm">{getNetworkIcon(selectedTransaction.network)}</span>
@@ -397,16 +401,16 @@ export default function TransactionsPage() {
                   </div>
                 </div>
                 {selectedTransaction.purpose && (
-                  <div className="flex justify-between">
+                  <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
                     <span className="text-sm text-muted-foreground">Purpose</span>
-                    <span className="text-sm">{selectedTransaction.purpose}</span>
+                    <span className="text-sm break-words text-right sm:text-left">{selectedTransaction.purpose}</span>
                   </div>
                 )}
-                <div className="flex justify-between">
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
                   <span className="text-sm text-muted-foreground">Date & Time</span>
-                  <span className="text-sm">{new Date(selectedTransaction.createdAt).toLocaleString()}</span>
+                  <span className="text-sm whitespace-nowrap">{new Date(selectedTransaction.createdAt).toLocaleString()}</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-1 sm:gap-0">
                   <span className="text-sm text-muted-foreground">Status</span>
                   <div className="flex items-center space-x-1">
                     {getStatusIcon(selectedTransaction.status)}

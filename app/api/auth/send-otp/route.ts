@@ -49,15 +49,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check if user exists for this phone (for signup, user might not exist yet)
+    const usersCollection = db.collection("users")
+    const existingUser = await usersCollection.findOne({ phone: formattedPhone })
+    const userId = existingUser?._id.toString()
+
     // Generate OTP
     const otpCode = generateOTP()
     
-    // Store OTP with normalized format in database
-    await storeOTP(formattedPhone, otpCode)
-    
-    // Also store with alternative format to handle verification mismatches
-    const phoneWithoutPlus = formattedPhone.replace(/^\+/, "")
-    await storeOTP(phoneWithoutPlus, otpCode)
+    // Store OTP with normalized format and userId (if user exists)
+    // This ensures OTPs are tied to specific users when possible
+    await storeOTP(formattedPhone, otpCode, userId)
 
     // Send OTP via SMS
     const smsSent = await sendOTPSMS(formattedPhone, otpCode)

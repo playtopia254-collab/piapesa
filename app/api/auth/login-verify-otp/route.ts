@@ -32,8 +32,24 @@ export async function POST(request: NextRequest) {
     
     console.log("Formatted phone:", formattedPhone)
 
-    // Try verifying with the formatted phone (now async, checks DB with multiple formats internally)
-    let isValid = await verifyOTP(formattedPhone, code)
+    // First, get the user to verify phone number matches
+    const db = await getDb()
+    const usersCollection = db.collection("users")
+    
+    // Find user by phone to get userId
+    const user = await usersCollection.findOne({ phone: formattedPhone })
+    
+    if (!user) {
+      console.log("❌ User not found for phone:", formattedPhone)
+      console.log("=".repeat(80))
+      return NextResponse.json(
+        { error: "Invalid phone number" },
+        { status: 400 }
+      )
+    }
+    
+    // Verify OTP with userId to ensure it's user-specific
+    let isValid = await verifyOTP(formattedPhone, code, user._id.toString())
 
     if (!isValid) {
       console.log("❌ All OTP verification attempts failed")
@@ -47,19 +63,7 @@ export async function POST(request: NextRequest) {
     console.log("✅ OTP verified successfully!")
     console.log("=".repeat(80))
 
-    // OTP verified - now get user data
-    const db = await getDb()
-    const usersCollection = db.collection("users")
-
-    // Find user by phone
-    const user = await usersCollection.findOne({ phone: formattedPhone })
-
-    if (!user) {
-      return NextResponse.json(
-        { error: "User not found" },
-        { status: 404 }
-      )
-    }
+    // User already fetched above, no need to fetch again
 
     // Return user data (without PIN)
     const userResponse = {

@@ -23,8 +23,14 @@ export async function POST(request: NextRequest) {
       formattedPhone = "+254" + formattedPhone
     }
 
-    // Try verifying with the formatted phone (now async, checks DB with multiple formats internally)
-    const isValid = await verifyOTP(formattedPhone, code)
+    // Get user if exists to verify phone number matches
+    const db = await getDb()
+    const usersCollection = db.collection("users")
+    const user = await usersCollection.findOne({ phone: formattedPhone })
+    const userId = user?._id.toString()
+
+    // Verify OTP - ensures phone number matches exactly and optionally userId
+    const isValid = await verifyOTP(formattedPhone, code, userId)
 
     if (!isValid) {
       return NextResponse.json(

@@ -103,14 +103,11 @@ export async function POST(request: NextRequest) {
     console.log("OTP Code:", otpCode)
     console.log("=".repeat(80))
     
-    // Store OTP with normalized format in database
-    await storeOTP(phoneForOTP, otpCode)
+    // Store OTP with normalized format and userId for security
+    // This ensures OTP can only be used by the specific user
+    await storeOTP(phoneForOTP, otpCode, user._id.toString())
     
-    // Also store with alternative formats to handle verification mismatches
-    const phoneWithoutPlus = phoneForOTP.replace(/^\+/, "")
-    await storeOTP(phoneWithoutPlus, otpCode)
-    
-    console.log("✅ OTP stored in DB with formats:", [phoneForOTP, phoneWithoutPlus])
+    console.log("✅ OTP stored in DB for phone:", phoneForOTP, "with userId:", user._id.toString())
 
     // Send OTP via SMS
     const smsSent = await sendOTPSMS(user.phone, otpCode)

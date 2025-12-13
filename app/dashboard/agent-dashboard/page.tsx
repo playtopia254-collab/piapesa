@@ -20,7 +20,15 @@ import {
   Navigation,
   AlertCircle,
   RefreshCw,
+  Radio,
 } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import Link from "next/link"
 import dynamic from "next/dynamic"
 import { CurrencyFormatter } from "@/components/currency-formatter"
@@ -354,7 +362,7 @@ export default function AgentDashboardPage() {
 
   // Background location updates (runs after agent is online)
   const startBackgroundLocationUpdates = () => {
-    if (!navigator.geolocation) return
+    if (typeof window === "undefined" || !window.navigator || !navigator.geolocation) return
 
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
@@ -390,7 +398,7 @@ export default function AgentDashboardPage() {
     if (isAvailable) {
       try {
         // Stop GPS watching
-        if (locationWatchIdRef.current !== null) {
+        if (typeof window !== "undefined" && navigator.geolocation && locationWatchIdRef.current !== null) {
           navigator.geolocation.clearWatch(locationWatchIdRef.current)
           locationWatchIdRef.current = null
         }
@@ -426,7 +434,7 @@ export default function AgentDashboardPage() {
   // Cleanup GPS watcher on unmount
   useEffect(() => {
     return () => {
-      if (locationWatchIdRef.current !== null) {
+      if (typeof window !== "undefined" && navigator.geolocation && locationWatchIdRef.current !== null) {
         navigator.geolocation.clearWatch(locationWatchIdRef.current)
       }
     }
@@ -920,7 +928,7 @@ export default function AgentDashboardPage() {
         if (!open && !isAvailable) {
           // Only allow closing if not online yet
           setIsWaitingForAccuracy(false)
-          if (locationWatchIdRef.current !== null) {
+          if (typeof window !== "undefined" && navigator.geolocation && locationWatchIdRef.current !== null) {
             navigator.geolocation.clearWatch(locationWatchIdRef.current)
             locationWatchIdRef.current = null
           }

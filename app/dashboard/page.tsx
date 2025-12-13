@@ -330,7 +330,7 @@ export default function DashboardPage() {
                 >
                   <div className="flex items-start sm:items-center space-x-3 flex-1 min-w-0">
                     <div className="flex-shrink-0 mt-0.5 sm:mt-0">
-                      {getTransactionIcon(transaction)}
+                    {getTransactionIcon(transaction)}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{getTransactionDescription(transaction)}</p>

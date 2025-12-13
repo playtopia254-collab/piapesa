@@ -46,29 +46,49 @@ const defaultCenter = {
   lng: 36.8219,
 }
 
-// Bolt-style map - MINIMAL styling to keep Google Maps detail visible
-// Only customize roads and hide small business clutter
+// EXACT Bolt/Uber style map - based on Google Maps "Retro" style
+// This creates the cream/beige buildings with white roads look
 const boltMapStyle: google.maps.MapTypeStyle[] = [
-  // Roads - white like Bolt (this is the main visual change)
-  { featureType: "road", elementType: "geometry.fill", stylers: [{ color: "#ffffff" }] },
-  { featureType: "road.highway", elementType: "geometry.fill", stylers: [{ color: "#ffffff" }] },
-  { featureType: "road.arterial", elementType: "geometry.fill", stylers: [{ color: "#ffffff" }] },
-  { featureType: "road.local", elementType: "geometry.fill", stylers: [{ color: "#ffffff" }] },
+  // Base elements - cream/beige tones
+  { elementType: "geometry", stylers: [{ color: "#ebe3cd" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#523735" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#f5f1e6" }] },
   
-  // Only hide small business labels (shops, restaurants) - keep everything else
+  // Administrative areas
+  { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#c9b2a6" }] },
+  { featureType: "administrative.land_parcel", elementType: "geometry.stroke", stylers: [{ color: "#dcd2be" }] },
+  { featureType: "administrative.land_parcel", elementType: "labels.text.fill", stylers: [{ color: "#ae9e90" }] },
+  
+  // Landscape - the cream/beige background
+  { featureType: "landscape.natural", elementType: "geometry", stylers: [{ color: "#dfd2ae" }] },
+  
+  // POIs - keep visible with good styling
+  { featureType: "poi", elementType: "geometry", stylers: [{ color: "#dfd2ae" }] },
+  { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#93817c" }] },
+  { featureType: "poi.park", elementType: "geometry.fill", stylers: [{ color: "#a5b076" }] },
+  { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#447530" }] },
+  
+  // Hide only small businesses
   { featureType: "poi.business", stylers: [{ visibility: "off" }] },
   
-  // Keep all other POIs visible (malls, hospitals, schools, etc.)
-  { featureType: "poi.attraction", stylers: [{ visibility: "on" }] },
-  { featureType: "poi.government", stylers: [{ visibility: "on" }] },
-  { featureType: "poi.medical", stylers: [{ visibility: "on" }] },
-  { featureType: "poi.park", stylers: [{ visibility: "on" }] },
-  { featureType: "poi.place_of_worship", stylers: [{ visibility: "on" }] },
-  { featureType: "poi.school", stylers: [{ visibility: "on" }] },
-  { featureType: "poi.sports_complex", stylers: [{ visibility: "on" }] },
+  // Roads - WHITE with subtle outlines (key Bolt feature)
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#f5f1e6" }] },
+  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#fdfcf8" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#f8c967" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#e9bc62" }] },
+  { featureType: "road.highway.controlled_access", elementType: "geometry", stylers: [{ color: "#e98d58" }] },
+  { featureType: "road.highway.controlled_access", elementType: "geometry.stroke", stylers: [{ color: "#db8555" }] },
+  { featureType: "road.local", elementType: "labels.text.fill", stylers: [{ color: "#806b63" }] },
   
-  // Transit visible
-  { featureType: "transit", stylers: [{ visibility: "on" }] },
+  // Transit
+  { featureType: "transit.line", elementType: "geometry", stylers: [{ color: "#dfd2ae" }] },
+  { featureType: "transit.line", elementType: "labels.text.fill", stylers: [{ color: "#8f7d77" }] },
+  { featureType: "transit.line", elementType: "labels.text.stroke", stylers: [{ color: "#ebe3cd" }] },
+  { featureType: "transit.station", elementType: "geometry", stylers: [{ color: "#dfd2ae" }] },
+  
+  // Water - light blue
+  { featureType: "water", elementType: "geometry.fill", stylers: [{ color: "#b9d3c2" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#92998d" }] },
 ]
 
 export function GoogleMapsWrapper({
@@ -963,9 +983,9 @@ export function GoogleMapsWrapper({
             options={{
               suppressMarkers: true, // We use custom markers
               polylineOptions: {
-                strokeColor: "#10b981",
-                strokeWeight: 6,
-                strokeOpacity: 0.9,
+                strokeColor: "#5B6EF7", // Bolt-style blue/purple route line
+                strokeWeight: 5,
+                strokeOpacity: 1,
               },
             }}
           />

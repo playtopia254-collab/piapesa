@@ -162,3 +162,141 @@
 .animate-move-connection-reverse {
   animation: moveConnectionReverse 2.5s ease-in-out infinite;
 }
+
+/* ============================================================================
+   MAPBOX GL - BOLT STYLE ENHANCEMENTS
+   ============================================================================
+   
+   These styles ensure the Mapbox map has that premium, Bolt-like feel:
+   - Smooth transitions
+   - Clean, minimal UI
+   - GPU-accelerated animations
+   ============================================================================ */
+
+/* Ensure Mapbox canvas uses GPU acceleration */
+.mapboxgl-canvas {
+  will-change: transform;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* Smooth marker animations */
+.bolt-user-marker,
+.bolt-agent-marker,
+.bolt-car-marker {
+  will-change: transform;
+  transition: transform 0.1s ease-out;
+}
+
+/* Premium shadow for markers on hover */
+.bolt-agent-marker:hover {
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.2));
+  transform: translate(-50%, -100%) scale(1.05);
+}
+
+/* Clean attribution styling */
+.mapboxgl-ctrl-attrib {
+  font-size: 10px !important;
+  background: rgba(255, 255, 255, 0.8) !important;
+  backdrop-filter: blur(4px);
+  border-radius: 4px !important;
+  padding: 2px 6px !important;
+}
+
+.mapboxgl-ctrl-attrib a {
+  color: #6b7280 !important;
+}
+
+/* Navigation controls styling */
+.mapboxgl-ctrl-group {
+  background: rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: blur(8px);
+  border-radius: 12px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+  border: 1px solid rgba(0, 0, 0, 0.05) !important;
+  overflow: hidden;
+}
+
+.mapboxgl-ctrl-group button {
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: 0 !important;
+}
+
+.mapboxgl-ctrl-group button:hover {
+  background-color: #f3f4f6 !important;
+}
+
+.mapboxgl-ctrl-group button:focus {
+  outline: none !important;
+  box-shadow: inset 0 0 0 2px rgba(99, 102, 241, 0.5) !important;
+}
+
+/* Geolocate button pulse animation */
+.mapboxgl-ctrl-geolocate-active {
+  background-color: rgba(59, 130, 246, 0.1) !important;
+}
+
+/* Remove default blue focus outline that can look jarring */
+.mapboxgl-canvas:focus {
+  outline: none;
+}
+
+/* Smooth popup transitions */
+.mapboxgl-popup {
+  animation: popupFadeIn 0.2s ease-out;
+}
+
+@keyframes popupFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Premium popup styling */
+.mapboxgl-popup-content {
+  padding: 16px !important;
+  border-radius: 12px !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15) !important;
+  border: 1px solid rgba(0, 0, 0, 0.05) !important;
+}
+
+.mapboxgl-popup-tip {
+  border-top-color: white !important;
+}
+
+/* Dark mode support for Mapbox controls */
+.dark .mapboxgl-ctrl-group {
+  background: rgba(30, 30, 30, 0.9) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark .mapboxgl-ctrl-group button {
+  color: #e5e7eb !important;
+}
+
+.dark .mapboxgl-ctrl-group button:hover {
+  background-color: #374151 !important;
+}
+
+.dark .mapboxgl-ctrl-attrib {
+  background: rgba(30, 30, 30, 0.8) !important;
+}
+
+.dark .mapboxgl-ctrl-attrib a {
+  color: #9ca3af !important;
+}
+
+.dark .mapboxgl-popup-content {
+  background: #1f2937 !important;
+  color: #f9fafb !important;
+}
+
+.dark .mapboxgl-popup-tip {
+  border-top-color: #1f2937 !important;
+}

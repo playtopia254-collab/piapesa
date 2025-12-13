@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -112,7 +112,10 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
 
   const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null)
   const [isRefiningLocation, setIsRefiningLocation] = useState(false)
+  const [searchStartTime, setSearchStartTime] = useState<number | null>(null)
+  const [minSearchElapsed, setMinSearchElapsed] = useState(false)
   const locationWatchCleanup = useRef<(() => void) | null>(null)
+  const MIN_SEARCH_DURATION = 8000 // Minimum 8 seconds of searching to allow GPS to refine
 
   // Get user's current location with continuous refinement (like WhatsApp)
   const captureLocation = async () => {
@@ -236,7 +239,7 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
 
   // Continuously refine location and fetch agents (like WhatsApp live location)
   useEffect(() => {
-    if (!userCoordinates || step !== "select_agent") return
+    if (!userCoordinates || step !== "map") return
 
     // Set up interval to keep fetching agents as location refines
     const refineInterval = setInterval(() => {
@@ -246,13 +249,16 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
     }, 3000) // Fetch every 3 seconds as location improves
 
     return () => clearInterval(refineInterval)
-  }, [userCoordinates, step])
+  }, [userCoordinates, step, fetchNearbyAgents])
 
   // Start map selection after entering amount - automatically get location and show agents
   const startMapSelection = async () => {
     setIsLoading(true)
     setError("")
     setIsRefiningLocation(true)
+    setMinSearchElapsed(false)
+    const startTime = Date.now()
+    setSearchStartTime(startTime)
 
     try {
       // Get GPS location first
@@ -260,19 +266,32 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
       if (!coords) {
         setError("Please enable location access to find nearby agents")
         setIsLoading(false)
+        setIsRefiningLocation(false)
         return
       }
 
       // Set location description from coordinates (reverse geocoding would be ideal, but for now use coordinates)
       setLocation(`${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`)
 
-      // Fetch nearby agents
+      // Fetch nearby agents immediately
       await fetchNearbyAgents(coords)
 
       // Move to map step
       setStep("map")
+      
+      // Set minimum search duration timer - keep searching for at least 8 seconds
+      setTimeout(() => {
+        setMinSearchElapsed(true)
+        // Fetch one more time after minimum duration with current coordinates
+        // Use the coords we just got, or userCoordinates if it's been updated
+        const currentCoords = userCoordinates || coords
+        if (currentCoords) {
+          fetchNearbyAgents(currentCoords)
+        }
+      }, MIN_SEARCH_DURATION)
     } catch (error) {
       setError("Failed to get your location. Please enable location access.")
+      setIsRefiningLocation(false)
     } finally {
       setIsLoading(false)
     }
@@ -788,17 +807,22 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
         )}
 
         {/* Map Component */}
-        {isLoadingAgents ? (
+        {(isLoadingAgents || !minSearchElapsed) ? (
           <Card>
             <CardContent className="py-8 sm:py-12 px-4 sm:px-6">
               <div className="flex flex-col items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
                 <p className="text-sm sm:text-base text-muted-foreground">
-                  {isRefiningLocation ? "Refining location and searching for agents..." : "Finding nearby agents..."}
+                  {isRefiningLocation ? "Refining location and searching for agents..." : "Searching for nearby agents..."}
                 </p>
                 {locationAccuracy && (
                   <p className="text-xs text-muted-foreground mt-2">
                     Location accuracy: ±{Math.round(locationAccuracy)}m
+                  </p>
+                )}
+                {!minSearchElapsed && (
+                  <p className="text-xs text-muted-foreground mt-2 animate-pulse">
+                    Getting more accurate location...
                   </p>
                 )}
               </div>
@@ -817,6 +841,11 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
                 ) : (
                   <p className="text-xs sm:text-sm text-muted-foreground mt-2">
                     Try again later or expand your search area
+                  </p>
+                )}
+                {locationAccuracy && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Final location accuracy: ±{Math.round(locationAccuracy)}m
                   </p>
                 )}
                 <Button

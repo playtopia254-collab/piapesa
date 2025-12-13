@@ -39,6 +39,40 @@ const defaultCenter = {
   lng: 36.8219,
 }
 
+// Premium Uber-style dark map theme
+const premiumDarkStyle: google.maps.MapTypeStyle[] = [
+  { elementType: "geometry", stylers: [{ color: "#1d1d35" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#1d1d35" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#8ec3b9" }] },
+  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#d4e8e4" }] },
+  { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#1e3d36" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#2c2c4a" }] },
+  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#1d1d35" }] },
+  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#9ca5b3" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#3d3d6b" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1d1d35" }] },
+  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#b0d5ce" }] },
+  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#2c2c4a" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0e1626" }] },
+]
+
+// Premium Uber-style light map theme
+const premiumLightStyle: google.maps.MapTypeStyle[] = [
+  { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#f5f5f5" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
+  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#1a1a2e" }] },
+  { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#c8facd" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#e8e8e8" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#fef3c7" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#fcd34d" }] },
+  { featureType: "transit", stylers: [{ visibility: "off" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#c9ebff" }] },
+]
+
 // Format distance for display
 function formatDistance(meters: number): string {
   if (meters < 1000) {
@@ -60,6 +94,19 @@ export function UberAgentTrackingMap({
   const [error, setError] = useState("")
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
   const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null)
+  const [isDarkMode, setIsDarkMode] = useState(false)
+  
+  // Detect system dark mode
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const darkModeQuery = window.matchMedia("(prefers-color-scheme: dark)")
+      setIsDarkMode(darkModeQuery.matches)
+      
+      const handler = (e: MediaQueryListEvent) => setIsDarkMode(e.matches)
+      darkModeQuery.addEventListener("change", handler)
+      return () => darkModeQuery.removeEventListener("change", handler)
+    }
+  }, [])
   
   // Refs for marker animations
   const markerRefs = useRef<{ [key: string]: google.maps.Marker }>({})
@@ -316,83 +363,98 @@ export function UberAgentTrackingMap({
     if (!isMapReady || typeof window === "undefined" || !window.google) return undefined
     return {
       url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
-        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+        <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">
           <defs>
-            <filter id="userShadow" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
-              <feOffset dx="0" dy="2" result="offsetblur"/>
-              <feComponentTransfer>
-                <feFuncA type="linear" slope="0.3"/>
-              </feComponentTransfer>
+            <filter id="premiumGlow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
               <feMerge>
-                <feMergeNode/>
+                <feMergeNode in="coloredBlur"/>
                 <feMergeNode in="SourceGraphic"/>
               </feMerge>
             </filter>
+            <radialGradient id="pulseGrad" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:0.5">
+                <animate attributeName="stop-opacity" values="0.5;0.15;0.5" dur="2s" repeatCount="indefinite"/>
+              </stop>
+              <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0">
+                <animate attributeName="stop-opacity" values="0;0.08;0" dur="2s" repeatCount="indefinite"/>
+              </stop>
+            </radialGradient>
+            <linearGradient id="userGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" style="stop-color:#60a5fa"/>
+              <stop offset="100%" style="stop-color:#3b82f6"/>
+            </linearGradient>
           </defs>
-          <g filter="url(#userShadow)">
-            <circle cx="24" cy="24" r="18" fill="#3b82f6" stroke="#ffffff" stroke-width="3"/>
-            <circle cx="24" cy="20" r="7" fill="#ffffff" opacity="0.9"/>
-            <circle cx="24" cy="24" r="5" fill="#3b82f6"/>
+          <!-- Animated pulse ring -->
+          <circle cx="40" cy="40" r="35" fill="url(#pulseGrad)">
+            <animate attributeName="r" values="28;38;28" dur="2s" repeatCount="indefinite"/>
+          </circle>
+          <!-- Accuracy ring -->
+          <circle cx="40" cy="40" r="22" fill="none" stroke="#3b82f6" stroke-width="2" opacity="0.2"/>
+          <!-- Main dot with glow -->
+          <g filter="url(#premiumGlow)">
+            <circle cx="40" cy="40" r="12" fill="url(#userGrad)" stroke="#ffffff" stroke-width="4"/>
+            <!-- Inner highlight for 3D effect -->
+            <circle cx="37" cy="37" r="4" fill="#93c5fd" opacity="0.5"/>
           </g>
         </svg>
       `),
-      scaledSize: new google.maps.Size(48, 48),
-      anchor: new google.maps.Point(24, 24),
+      scaledSize: new google.maps.Size(80, 80),
+      anchor: new google.maps.Point(40, 40),
     }
   }
 
-  // Create agent marker icon (orange pin with subtle glow for pulse effect)
+  // Create premium agent marker icon
   const createAgentMarkerIcon = (isSelected: boolean, agentId: string, isAvailable: boolean = true): google.maps.Icon | undefined => {
     if (!isMapReady || typeof window === "undefined" || !window.google) return undefined
-    let color = "#f97316" // Default orange
-    let shadowColor = "#ea580c"
     
-    if (isSelected) {
-      color = "#22c55e" // Green when selected
-      shadowColor = "#16a34a"
-    } else if (!isAvailable) {
-      color = "#6b7280" // Gray when offline
-      shadowColor = "#4b5563"
-    }
+    const primaryColor = isSelected ? "#10b981" : isAvailable ? "#6366f1" : "#6b7280"
+    const secondaryColor = isSelected ? "#059669" : isAvailable ? "#4f46e5" : "#4b5563"
     
     return {
       url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
-        <svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 56 56">
+        <svg xmlns="http://www.w3.org/2000/svg" width="72" height="88" viewBox="0 0 72 88">
           <defs>
-            <filter id="agentShadow${agentId}" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
-              <feOffset dx="0" dy="2" result="offsetblur"/>
-              <feComponentTransfer>
-                <feFuncA type="linear" slope="0.4"/>
-              </feComponentTransfer>
-              <feMerge>
-                <feMergeNode/>
-                <feMergeNode in="SourceGraphic"/>
-              </feMerge>
+            <filter id="premiumShadow${agentId}" x="-50%" y="-30%" width="200%" height="200%">
+              <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="${secondaryColor}" flood-opacity="0.4"/>
             </filter>
-            <radialGradient id="agentGradient${agentId}">
-              <stop offset="0%" style="stop-color:${color};stop-opacity:0.4" />
-              <stop offset="100%" style="stop-color:${color};stop-opacity:0.1" />
-            </radialGradient>
+            <linearGradient id="pinGrad${agentId}" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" style="stop-color:${primaryColor}"/>
+              <stop offset="50%" style="stop-color:${primaryColor}"/>
+              <stop offset="100%" style="stop-color:${secondaryColor}"/>
+            </linearGradient>
+            ${isSelected ? `
+            <radialGradient id="selectedPulse${agentId}" cx="50%" cy="40%" r="50%">
+              <stop offset="0%" style="stop-color:${primaryColor};stop-opacity:0.5">
+                <animate attributeName="stop-opacity" values="0.5;0.15;0.5" dur="1.5s" repeatCount="indefinite"/>
+              </stop>
+              <stop offset="100%" style="stop-color:${primaryColor};stop-opacity:0"/>
+            </radialGradient>` : ""}
           </defs>
-          <g filter="url(#agentShadow${agentId})">
-            <!-- Pulse ring effect (static, will be animated via CSS overlay if needed) -->
-            <circle cx="28" cy="28" r="22" fill="url(#agentGradient${agentId})"/>
-            <!-- Main pin shape -->
-            <path d="M28 10 C22 10, 17 15, 17 21 C17 27, 28 46, 28 46 C28 46, 39 27, 39 21 C39 15, 34 10, 28 10 Z" 
-                  fill="${color}" 
-                  stroke="#ffffff" 
-                  stroke-width="2.5"/>
-            <!-- Inner highlight -->
-            <circle cx="28" cy="21" r="9" fill="#ffffff" opacity="0.95"/>
-            <!-- Center dot -->
-            <circle cx="28" cy="21" r="6" fill="${color}"/>
+          ${isSelected ? `
+          <!-- Selection pulse animation -->
+          <circle cx="36" cy="36" r="32" fill="url(#selectedPulse${agentId})">
+            <animate attributeName="r" values="28;38;28" dur="1.5s" repeatCount="indefinite"/>
+          </circle>` : ""}
+          <!-- Premium pin with shadow -->
+          <g filter="url(#premiumShadow${agentId})">
+            <!-- Pin shape -->
+            <path d="M36 8 C22 8, 12 20, 12 32 C12 48, 36 80, 36 80 C36 80, 60 48, 60 32 C60 20, 50 8, 36 8 Z" 
+                  fill="url(#pinGrad${agentId})" stroke="#ffffff" stroke-width="3"/>
+            <!-- Avatar circle -->
+            <circle cx="36" cy="30" r="16" fill="#ffffff"/>
+            <!-- Agent icon -->
+            <circle cx="36" cy="26" r="7" fill="${primaryColor}"/>
+            <path d="M26 40 Q36 32, 46 40" fill="${primaryColor}"/>
           </g>
+          <!-- Verification badge for selected -->
+          ${isSelected ? `
+          <circle cx="54" cy="16" r="10" fill="#10b981" stroke="#ffffff" stroke-width="2"/>
+          <path d="M50 16 L53 19 L58 12" stroke="#ffffff" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>` : ""}
         </svg>
       `),
-      scaledSize: new google.maps.Size(56, 56),
-      anchor: new google.maps.Point(28, 46),
+      scaledSize: new google.maps.Size(72, 88),
+      anchor: new google.maps.Point(36, 80),
     }
   }
 
@@ -624,7 +686,7 @@ export function UberAgentTrackingMap({
       )}
 
       {/* Map Container */}
-      <Card className="overflow-hidden">
+      <Card className="overflow-hidden rounded-2xl shadow-2xl border-2 border-border/50">
         <div style={{ height }} className="relative">
           <GoogleMap
             mapContainerStyle={mapContainerStyle}
@@ -635,16 +697,24 @@ export function UberAgentTrackingMap({
             options={{
               disableDefaultUI: false,
               zoomControl: true,
+              zoomControlOptions: {
+                position: typeof window !== "undefined" && window.google 
+                  ? google.maps.ControlPosition.RIGHT_CENTER 
+                  : undefined,
+              },
               streetViewControl: false,
               mapTypeControl: false,
               fullscreenControl: true,
-              styles: [
-                {
-                  featureType: "poi",
-                  elementType: "labels",
-                  stylers: [{ visibility: "off" }],
-                },
-              ],
+              fullscreenControlOptions: {
+                position: typeof window !== "undefined" && window.google 
+                  ? google.maps.ControlPosition.RIGHT_TOP 
+                  : undefined,
+              },
+              scaleControl: true,
+              rotateControl: false,
+              clickableIcons: false,
+              gestureHandling: "greedy",
+              styles: isDarkMode ? premiumDarkStyle : premiumLightStyle,
             }}
           >
             {/* User location marker */}

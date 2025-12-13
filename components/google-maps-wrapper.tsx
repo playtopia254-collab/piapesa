@@ -46,6 +46,43 @@ const defaultCenter = {
   lng: 36.8219,
 }
 
+// Premium Uber-style dark map theme
+const premiumDarkStyle: google.maps.MapTypeStyle[] = [
+  { elementType: "geometry", stylers: [{ color: "#1d1d35" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#1d1d35" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#8ec3b9" }] },
+  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#d4e8e4" }] },
+  { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#1e3d36" }] },
+  { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#6b9a76" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#2c2c4a" }] },
+  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#1d1d35" }] },
+  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#9ca5b3" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#3d3d6b" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1d1d35" }] },
+  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#b0d5ce" }] },
+  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#2c2c4a" }] },
+  { featureType: "transit.station", elementType: "labels.text.fill", stylers: [{ color: "#b0d5ce" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0e1626" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#4e6d70" }] },
+]
+
+// Premium Uber-style light map theme
+const premiumLightStyle: google.maps.MapTypeStyle[] = [
+  { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#f5f5f5" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
+  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#1a1a2e" }] },
+  { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#c8facd" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
+  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#e8e8e8" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#fef3c7" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#fcd34d" }] },
+  { featureType: "transit", stylers: [{ visibility: "off" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#c9ebff" }] },
+]
+
 export function GoogleMapsWrapper({
   userLocation,
   agents,
@@ -60,7 +97,20 @@ export function GoogleMapsWrapper({
   const [directionsService, setDirectionsService] = useState<google.maps.DirectionsService | null>(null)
   const [isMapReady, setIsMapReady] = useState(false)
   const [agentHeading, setAgentHeading] = useState<number>(0)
+  const [isDarkMode, setIsDarkMode] = useState(false)
   const previousAgentLocation = useRef<{ lat: number; lng: number } | null>(null)
+  
+  // Detect system dark mode
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const darkModeQuery = window.matchMedia("(prefers-color-scheme: dark)")
+      setIsDarkMode(darkModeQuery.matches)
+      
+      const handler = (e: MediaQueryListEvent) => setIsDarkMode(e.matches)
+      darkModeQuery.addEventListener("change", handler)
+      return () => darkModeQuery.removeEventListener("change", handler)
+    }
+  }, [])
   
   // Smooth marker animation state
   const [smoothedAgentPos, setSmoothedAgentPos] = useState<{ lat: number; lng: number } | null>(null)
@@ -570,98 +620,96 @@ export function GoogleMapsWrapper({
     if (!isMapReady || typeof window === "undefined" || !window.google) return undefined
     return {
       url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
-        <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">
+        <svg xmlns="http://www.w3.org/2000/svg" width="90" height="90" viewBox="0 0 90 90">
           <defs>
-            <filter id="userShadow" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
-              <feOffset dx="0" dy="3" result="offsetblur"/>
-              <feComponentTransfer>
-                <feFuncA type="linear" slope="0.5"/>
-              </feComponentTransfer>
+            <filter id="premiumGlow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
               <feMerge>
-                <feMergeNode/>
+                <feMergeNode in="coloredBlur"/>
                 <feMergeNode in="SourceGraphic"/>
               </feMerge>
             </filter>
-            <linearGradient id="userGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
-              <stop offset="100%" style="stop-color:#2563eb;stop-opacity:1" />
-            </linearGradient>
-            <radialGradient id="userGlow" cx="50%" cy="50%">
-              <stop offset="0%" style="stop-color:#60a5fa;stop-opacity:0.6" />
-              <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0" />
+            <radialGradient id="pulseGrad" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:0.5">
+                <animate attributeName="stop-opacity" values="0.5;0.15;0.5" dur="2s" repeatCount="indefinite"/>
+              </stop>
+              <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0">
+                <animate attributeName="stop-opacity" values="0;0.08;0" dur="2s" repeatCount="indefinite"/>
+              </stop>
             </radialGradient>
+            <linearGradient id="userGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" style="stop-color:#60a5fa"/>
+              <stop offset="100%" style="stop-color:#3b82f6"/>
+            </linearGradient>
           </defs>
-          <g filter="url(#userShadow)">
-            <!-- Outer glow ring -->
-            <circle cx="40" cy="40" r="36" fill="url(#userGlow)"/>
-            <!-- Main circle background -->
-            <circle cx="40" cy="40" r="32" fill="url(#userGradient)" stroke="#ffffff" stroke-width="4"/>
-            <!-- Person/Avatar Icon -->
-            <g transform="translate(40, 40)">
-              <!-- Head -->
-              <circle cx="0" cy="-8" r="10" fill="#ffffff" stroke="#3b82f6" stroke-width="2"/>
-              <!-- Body (shoulders and torso) -->
-              <path d="M -14 4 Q -14 0, -10 0 L 10 0 Q 14 0, 14 4 L 14 20 Q 14 24, 10 24 L -10 24 Q -14 24, -14 20 Z" 
-                    fill="#ffffff" stroke="#3b82f6" stroke-width="2"/>
-              <!-- Face details -->
-              <circle cx="-4" cy="-10" r="1.5" fill="#3b82f6"/>
-              <circle cx="4" cy="-10" r="1.5" fill="#3b82f6"/>
-              <path d="M -4 -6 Q 0 -4, 4 -6" stroke="#3b82f6" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-            </g>
-            <!-- Pulse ring animation -->
-            <circle cx="40" cy="40" r="30" fill="none" stroke="#3b82f6" stroke-width="2" opacity="0.5"/>
+          <!-- Animated pulse ring -->
+          <circle cx="45" cy="45" r="38" fill="url(#pulseGrad)">
+            <animate attributeName="r" values="28;42;28" dur="2s" repeatCount="indefinite"/>
+          </circle>
+          <!-- Accuracy ring -->
+          <circle cx="45" cy="45" r="25" fill="none" stroke="#3b82f6" stroke-width="2" opacity="0.2"/>
+          <!-- Main dot with glow -->
+          <g filter="url(#premiumGlow)">
+            <circle cx="45" cy="45" r="14" fill="url(#userGrad)" stroke="#ffffff" stroke-width="4"/>
+            <!-- Inner highlight for 3D effect -->
+            <circle cx="41" cy="41" r="4" fill="#93c5fd" opacity="0.5"/>
           </g>
         </svg>
       `),
-      scaledSize: new google.maps.Size(80, 80),
-      anchor: new google.maps.Point(40, 40), // Center anchor for accurate positioning
+      scaledSize: new google.maps.Size(90, 90),
+      anchor: new google.maps.Point(45, 45),
     }
   }
 
   const createAgentMarkerIcon = (isSelected: boolean): google.maps.Icon | undefined => {
     if (!isMapReady || typeof window === "undefined" || !window.google) return undefined
-    const color = isSelected ? "#22c55e" : "#f97316"
-    const shadowColor = isSelected ? "#16a34a" : "#ea580c"
+    const primaryColor = isSelected ? "#10b981" : "#6366f1"
+    const secondaryColor = isSelected ? "#059669" : "#4f46e5"
+    const glowOpacity = isSelected ? "0.4" : "0.2"
     return {
       url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
-        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+        <svg xmlns="http://www.w3.org/2000/svg" width="72" height="88" viewBox="0 0 72 88">
           <defs>
-            <filter id="agentShadow" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
-              <feOffset dx="0" dy="3" result="offsetblur"/>
-              <feComponentTransfer>
-                <feFuncA type="linear" slope="0.4"/>
-              </feComponentTransfer>
-              <feMerge>
-                <feMergeNode/>
-                <feMergeNode in="SourceGraphic"/>
-              </feMerge>
+            <filter id="premiumShadow" x="-50%" y="-30%" width="200%" height="200%">
+              <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="${secondaryColor}" flood-opacity="0.4"/>
             </filter>
-            <linearGradient id="agentGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" style="stop-color:${color};stop-opacity:1" />
-              <stop offset="100%" style="stop-color:${shadowColor};stop-opacity:1" />
+            <linearGradient id="pinGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" style="stop-color:${primaryColor}"/>
+              <stop offset="50%" style="stop-color:${primaryColor}"/>
+              <stop offset="100%" style="stop-color:${secondaryColor}"/>
             </linearGradient>
+            ${isSelected ? `
+            <radialGradient id="selectedPulse" cx="50%" cy="40%" r="50%">
+              <stop offset="0%" style="stop-color:${primaryColor};stop-opacity:0.5">
+                <animate attributeName="stop-opacity" values="0.5;0.15;0.5" dur="1.5s" repeatCount="indefinite"/>
+              </stop>
+              <stop offset="100%" style="stop-color:${primaryColor};stop-opacity:0"/>
+            </radialGradient>` : ""}
           </defs>
-          <g filter="url(#agentShadow)">
-            <!-- Location pin shape -->
-            <path d="M32 8 C24 8, 18 14, 18 22 C18 30, 32 56, 32 56 C32 56, 46 30, 46 22 C46 14, 40 8, 32 8 Z" 
-                  fill="url(#agentGradient)" 
-                  stroke="#ffffff" 
-                  stroke-width="3"/>
-            <!-- Inner highlight -->
-            <ellipse cx="32" cy="22" rx="12" ry="12" fill="#ffffff" opacity="0.3"/>
-            <!-- Icon/Letter -->
-            <circle cx="32" cy="22" r="8" fill="#ffffff"/>
-            <text x="32" y="26" font-family="Arial, sans-serif" font-size="14" font-weight="bold" 
-                  fill="${color}" text-anchor="middle">A</text>
-            <!-- Glow effect -->
-            <circle cx="32" cy="22" r="14" fill="none" stroke="${color}" stroke-width="2" opacity="0.3"/>
+          ${isSelected ? `
+          <!-- Selection pulse animation -->
+          <circle cx="36" cy="36" r="32" fill="url(#selectedPulse)">
+            <animate attributeName="r" values="28;38;28" dur="1.5s" repeatCount="indefinite"/>
+          </circle>` : ""}
+          <!-- Premium pin with shadow -->
+          <g filter="url(#premiumShadow)">
+            <!-- Pin shape -->
+            <path d="M36 8 C22 8, 12 20, 12 32 C12 48, 36 80, 36 80 C36 80, 60 48, 60 32 C60 20, 50 8, 36 8 Z" 
+                  fill="url(#pinGrad)" stroke="#ffffff" stroke-width="3"/>
+            <!-- Avatar circle -->
+            <circle cx="36" cy="30" r="16" fill="#ffffff"/>
+            <!-- Agent icon -->
+            <circle cx="36" cy="26" r="7" fill="${primaryColor}"/>
+            <path d="M26 40 Q36 32, 46 40" fill="${primaryColor}"/>
           </g>
+          <!-- Verification badge for selected -->
+          ${isSelected ? `
+          <circle cx="54" cy="16" r="10" fill="#10b981" stroke="#ffffff" stroke-width="2"/>
+          <path d="M50 16 L53 19 L58 12" stroke="#ffffff" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>` : ""}
         </svg>
       `),
-      scaledSize: new google.maps.Size(64, 64),
-      anchor: new google.maps.Point(32, 56), // Bottom center of pin for accurate positioning
+      scaledSize: new google.maps.Size(72, 88),
+      anchor: new google.maps.Point(36, 80),
     }
   }
 
@@ -727,11 +775,11 @@ export function GoogleMapsWrapper({
     const rotation = heading || 0
     return {
       url: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(`
-        <svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72">
+        <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">
           <defs>
-            <filter id="carShadow" x="-50%" y="-50%" width="200%" height="200%">
+            <filter id="premiumCarShadow" x="-50%" y="-50%" width="200%" height="200%">
               <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
-              <feOffset dx="0" dy="4" result="offsetblur"/>
+              <feOffset dx="0" dy="2"/>
               <feComponentTransfer>
                 <feFuncA type="linear" slope="0.5"/>
               </feComponentTransfer>
@@ -740,42 +788,71 @@ export function GoogleMapsWrapper({
                 <feMergeNode in="SourceGraphic"/>
               </feMerge>
             </filter>
-            <linearGradient id="carGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" style="stop-color:#1e40af;stop-opacity:1" />
-              <stop offset="100%" style="stop-color:#1e3a8a;stop-opacity:1" />
+            <linearGradient id="carBodyGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" style="stop-color:#0f172a"/>
+              <stop offset="50%" style="stop-color:#1e293b"/>
+              <stop offset="100%" style="stop-color:#0f172a"/>
             </linearGradient>
+            <linearGradient id="roofGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" style="stop-color:#334155"/>
+              <stop offset="100%" style="stop-color:#1e293b"/>
+            </linearGradient>
+            <!-- Direction indicator glow -->
+            <radialGradient id="directionGlow" cx="50%" cy="0%" r="80%">
+              <stop offset="0%" style="stop-color:#10b981;stop-opacity:0.8"/>
+              <stop offset="100%" style="stop-color:#10b981;stop-opacity:0"/>
+            </radialGradient>
           </defs>
-          <g filter="url(#carShadow)" transform="rotate(${rotation} 36 36)">
-            <!-- Car body with modern design -->
-            <rect x="14" y="24" width="44" height="24" rx="4" fill="url(#carGradient)" stroke="#ffffff" stroke-width="2.5"/>
-            <!-- Windshield -->
-            <rect x="18" y="28" width="14" height="16" rx="2" fill="#3b82f6" opacity="0.6"/>
-            <!-- Rear window -->
-            <rect x="32" y="28" width="14" height="16" rx="2" fill="#3b82f6" opacity="0.6"/>
-            <!-- Roof -->
-            <rect x="16" y="18" width="40" height="10" rx="3" fill="#1e3a8a"/>
-            <!-- Wheels with detail -->
-            <circle cx="24" cy="52" r="6" fill="#1a1a1a" stroke="#ffffff" stroke-width="2"/>
-            <circle cx="24" cy="52" r="3" fill="#4a4a4a"/>
-            <circle cx="24" cy="52" r="1.5" fill="#ffffff"/>
-            <circle cx="48" cy="52" r="6" fill="#1a1a1a" stroke="#ffffff" stroke-width="2"/>
-            <circle cx="48" cy="52" r="3" fill="#4a4a4a"/>
-            <circle cx="48" cy="52" r="1.5" fill="#ffffff"/>
-            <!-- Headlights -->
-            <circle cx="20" cy="32" r="2" fill="#ffff99"/>
-            <circle cx="20" cy="40" r="2" fill="#ff4444"/>
-            <!-- Side detail line -->
-            <line x1="18" y1="36" x2="54" y2="36" stroke="#ffffff" stroke-width="1.5" opacity="0.5"/>
+          <g filter="url(#premiumCarShadow)" transform="rotate(${rotation} 40 40)">
+            <!-- Direction indicator beam -->
+            <ellipse cx="40" cy="10" rx="12" ry="18" fill="url(#directionGlow)" opacity="0.7">
+              <animate attributeName="opacity" values="0.7;0.4;0.7" dur="1s" repeatCount="indefinite"/>
+            </ellipse>
+            <!-- Car shadow on ground -->
+            <ellipse cx="40" cy="60" rx="20" ry="7" fill="#000000" opacity="0.15"/>
+            <!-- Main car body -->
+            <rect x="20" y="30" width="40" height="26" rx="5" fill="url(#carBodyGrad)" stroke="#ffffff" stroke-width="2"/>
+            <!-- Roof/Cabin -->
+            <path d="M24 30 L28 20 H52 L56 30" fill="url(#roofGrad)" stroke="#ffffff" stroke-width="2"/>
+            <!-- Windows -->
+            <rect x="28" y="22" width="11" height="9" rx="1.5" fill="#1e3a5f" opacity="0.9"/>
+            <rect x="41" y="22" width="11" height="9" rx="1.5" fill="#1e3a5f" opacity="0.9"/>
+            <!-- Front headlights (bright) -->
+            <circle cx="24" cy="34" r="3" fill="#fef08a">
+              <animate attributeName="opacity" values="1;0.7;1" dur="0.5s" repeatCount="indefinite"/>
+            </circle>
+            <circle cx="56" cy="34" r="3" fill="#fef08a">
+              <animate attributeName="opacity" values="1;0.7;1" dur="0.5s" repeatCount="indefinite"/>
+            </circle>
+            <!-- Taillights -->
+            <circle cx="24" cy="52" r="2.5" fill="#ef4444"/>
+            <circle cx="56" cy="52" r="2.5" fill="#ef4444"/>
+            <!-- Premium chrome strip -->
+            <line x1="22" y1="43" x2="58" y2="43" stroke="#94a3b8" stroke-width="1.5" opacity="0.6"/>
+            <!-- Wheels with alloy detail -->
+            <g>
+              <circle cx="26" cy="58" r="5" fill="#1f2937" stroke="#475569" stroke-width="2"/>
+              <circle cx="26" cy="58" r="2.5" fill="#4b5563"/>
+              <circle cx="26" cy="58" r="1" fill="#9ca3af"/>
+            </g>
+            <g>
+              <circle cx="54" cy="58" r="5" fill="#1f2937" stroke="#475569" stroke-width="2"/>
+              <circle cx="54" cy="58" r="2.5" fill="#4b5563"/>
+              <circle cx="54" cy="58" r="1" fill="#9ca3af"/>
+            </g>
+            <!-- Side mirrors -->
+            <ellipse cx="18" cy="36" rx="3" ry="2" fill="#1e293b"/>
+            <ellipse cx="62" cy="36" rx="3" ry="2" fill="#1e293b"/>
           </g>
         </svg>
       `),
-      scaledSize: new google.maps.Size(72, 72),
-      anchor: new google.maps.Point(36, 36), // Center anchor for accurate positioning
+      scaledSize: new google.maps.Size(80, 80),
+      anchor: new google.maps.Point(40, 40),
     }
   }
 
   return (
-    <div className="h-[350px] w-full relative border rounded-lg overflow-hidden">
+    <div className="h-[400px] sm:h-[450px] lg:h-[500px] w-full relative rounded-2xl overflow-hidden shadow-2xl border-2 border-border/50">
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
         center={center}
@@ -785,16 +862,24 @@ export function GoogleMapsWrapper({
         options={{
           disableDefaultUI: false,
           zoomControl: true,
+          zoomControlOptions: {
+            position: typeof window !== "undefined" && window.google 
+              ? google.maps.ControlPosition.RIGHT_CENTER 
+              : undefined,
+          },
           streetViewControl: false,
           mapTypeControl: false,
           fullscreenControl: true,
-          styles: [
-            {
-              featureType: "poi",
-              elementType: "labels",
-              stylers: [{ visibility: "off" }],
-            },
-          ],
+          fullscreenControlOptions: {
+            position: typeof window !== "undefined" && window.google 
+              ? google.maps.ControlPosition.RIGHT_TOP 
+              : undefined,
+          },
+          scaleControl: true,
+          rotateControl: false,
+          clickableIcons: false,
+          gestureHandling: "greedy",
+          styles: isDarkMode ? premiumDarkStyle : premiumLightStyle,
         }}
       >
         {/* User location marker with accurate positioning */}
@@ -901,39 +986,41 @@ export function GoogleMapsWrapper({
             options={{
               suppressMarkers: true, // We use custom markers
               polylineOptions: {
-                strokeColor: "#22c55e",
-                strokeWeight: 5,
-                strokeOpacity: 0.8,
+                strokeColor: "#10b981",
+                strokeWeight: 6,
+                strokeOpacity: 0.9,
               },
             }}
           />
         )}
       </GoogleMap>
 
-      {/* Legend overlay */}
-      <div className="absolute bottom-2 left-2 right-2 bg-black/70 text-white p-2 rounded text-xs space-y-1 z-10">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-          <span>Your Location</span>
+      {/* Premium Legend overlay */}
+      <div className="absolute bottom-3 left-3 bg-background/95 backdrop-blur-md text-foreground px-4 py-3 rounded-xl shadow-2xl border border-border/50 text-sm z-10">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          <div className="flex items-center gap-2">
+            <div className="w-3.5 h-3.5 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 ring-2 ring-blue-400/30"></div>
+            <span className="font-medium">Your Location</span>
+          </div>
+          {agents.length > 0 && (
+            <div className="flex items-center gap-2">
+              <div className="w-3.5 h-3.5 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 ring-2 ring-indigo-400/30"></div>
+              <span className="font-medium">{agents.length} Agent{agents.length !== 1 ? "s" : ""} Available</span>
+            </div>
+          )}
+          {showRoute && selectedAgent && (
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-1.5 rounded-full bg-gradient-to-r from-emerald-400 to-emerald-600"></div>
+              <span className="font-medium">Route to {selectedAgent.name}</span>
+            </div>
+          )}
+          {showMeetingPoint && meetingPoint && (
+            <div className="flex items-center gap-2">
+              <div className="w-3.5 h-3.5 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 ring-2 ring-purple-400/30"></div>
+              <span className="font-medium">Meeting Point</span>
+            </div>
+          )}
         </div>
-        {agents.length > 0 && (
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-orange-500"></div>
-            <span>{agents.length} Agent{agents.length !== 1 ? "s" : ""} Available</span>
-          </div>
-        )}
-        {showRoute && selectedAgent && (
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-green-500 h-1"></div>
-            <span>Route to {selectedAgent.name}</span>
-          </div>
-        )}
-        {showMeetingPoint && meetingPoint && (
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-purple-500"></div>
-            <span>Meeting Point</span>
-          </div>
-        )}
       </div>
     </div>
   )

@@ -1304,30 +1304,30 @@ export default function AgentDashboardPage() {
                         </CardHeader>
                         <CardContent className="p-0">
                           {/* Google Maps with Bolt-style for agent navigation */}
-                          {agentLocation ? (
-                            <GoogleMapsWrapper
-                              userLocation={request.coordinates} // Customer location
-                              agents={[{
-                                id: user?.id || "agent",
-                                name: "You",
-                                phone: user?.phone || "",
-                                location: agentLocation, // Agent's real-time location
-                                rating: 5.0,
-                                totalTransactions: 0,
-                                distance: (() => {
-                                  if (!request.coordinates || !agentLocation) return 0
-                                  const R = 6371
-                                  const dLat = (request.coordinates.lat - agentLocation.lat) * (Math.PI / 180)
-                                  const dLng = (request.coordinates.lng - agentLocation.lng) * (Math.PI / 180)
-                                  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                                    Math.cos(agentLocation.lat * (Math.PI / 180)) *
-                                    Math.cos(request.coordinates.lat * (Math.PI / 180)) *
-                                    Math.sin(dLng / 2) * Math.sin(dLng / 2)
-                                  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-                                  return R * c
-                                })(),
-                                distanceFormatted: getDistanceToClient(request.coordinates) || "Calculating...",
-                              }]}
+                            {agentLocation ? (
+                              <GoogleMapsWrapper
+                                userLocation={request.coordinates} // Customer location
+                                agents={[{
+                                  id: user?.id || "agent",
+                                  name: "You",
+                                  phone: user?.phone || "",
+                                  location: agentLocation, // Agent's real-time location
+                                  rating: 5.0,
+                                  totalTransactions: 0,
+                                  distance: (() => {
+                                    if (!request.coordinates || !agentLocation) return 0
+                                    const R = 6371
+                                    const dLat = (request.coordinates.lat - agentLocation.lat) * (Math.PI / 180)
+                                    const dLng = (request.coordinates.lng - agentLocation.lng) * (Math.PI / 180)
+                                    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                                      Math.cos(agentLocation.lat * (Math.PI / 180)) *
+                                      Math.cos(request.coordinates.lat * (Math.PI / 180)) *
+                                      Math.sin(dLng / 2) * Math.sin(dLng / 2)
+                                    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+                                    return R * c
+                                  })(),
+                                  distanceFormatted: getDistanceToClient(request.coordinates) || "Calculating...",
+                                }]}
                               selectedAgent={{
                                 id: user?.id || "agent",
                                 name: "You",
@@ -1338,18 +1338,18 @@ export default function AgentDashboardPage() {
                                 distance: 0,
                                 distanceFormatted: getDistanceToClient(request.coordinates) || "Calculating...",
                               }}
-                              onSelectAgent={() => {}}
+                                onSelectAgent={() => {}}
                               showRoute={true}
                               agentLocation={agentLocation}
-                            />
-                          ) : (
+                              />
+                            ) : (
                             <div className="h-96 flex items-center justify-center bg-gray-100 dark:bg-gray-800">
-                              <div className="text-center">
-                                <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-2" />
-                                <p className="text-sm text-muted-foreground">Getting your location...</p>
+                                <div className="text-center">
+                                  <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto mb-2" />
+                                  <p className="text-sm text-muted-foreground">Getting your location...</p>
+                                </div>
                               </div>
-                            </div>
-                          )}
+                            )}
                         </CardContent>
                       </Card>
                     </div>

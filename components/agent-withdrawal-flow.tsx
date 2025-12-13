@@ -112,11 +112,13 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
 
   const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null)
   const [isGettingLocation, setIsGettingLocation] = useState(false)
+  const [locationStatus, setLocationStatus] = useState<string>("")
   const [straightLineDistanceMeters, setStraightLineDistanceMeters] = useState<number | null>(null)
   const hasSearchedAgents = useRef(false)
   const locationWatchId = useRef<number | null>(null)
 
-  const ACCURACY_THRESHOLD = 100 // Only search when accuracy ≤ 100m
+  const TARGET_ACCURACY = 50 // Target 50m, but accept up to 100m
+  const MAX_ACCEPTABLE_ACCURACY = 100 // Maximum acceptable accuracy
 
   // Open Google Maps with directions
   const openInMaps = useCallback((destination: { lat: number; lng: number }, label?: string) => {
@@ -146,53 +148,234 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
     return `${(meters / 1000).toFixed(1)}km`
   }, [])
 
-  // Get location with accuracy gate
+  // Fast location capture with multiple strategies
   const getLocationWithAccuracy = useCallback(async (): Promise<{ lat: number; lng: number; accuracy: number } | null> => {
     return new Promise((resolve) => {
+      // Check if geolocation is available
       if (typeof navigator === "undefined" || !navigator.geolocation) {
+        setError("Geolocation is not supported by your browser")
         resolve(null)
         return
       }
 
+      // Check permissions first (if available)
+      if ('permissions' in navigator) {
+        navigator.permissions.query({ name: 'geolocation' as PermissionName }).then((result) => {
+          if (result.state === 'denied') {
+            setError("Location permission denied. Please enable location in your browser settings.")
+            resolve(null)
+            return
+          }
+        }).catch(() => {
+          // Permission API not supported, continue anyway
+        })
+      }
+
       setIsGettingLocation(true)
+      setLocationStatus("Getting your location...")
       let bestLocation: { lat: number; lng: number; accuracy: number } | null = null
-      let attempts = 0
-      const maxAttempts = 10
+      let resolved = false
+      let watchId: number | null = null
+      let hasReceivedLocation = false
 
-      const watchId = navigator.geolocation.watchPosition(
-        (position) => {
-          const { latitude, longitude, accuracy } = position.coords
-          attempts++
-          
-          setLocationAccuracy(accuracy)
-          setUserCoordinates({ lat: latitude, lng: longitude })
-          
-          if (!bestLocation || accuracy < bestLocation.accuracy) {
-            bestLocation = { lat: latitude, lng: longitude, accuracy }
+      // Strategy 1: Try getCurrentPosition first (fastest, single shot)
+      const tryGetCurrentPosition = () => {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            if (resolved) return
+            hasReceivedLocation = true
+            const { latitude, longitude, accuracy } = position.coords
+            
+            setLocationAccuracy(accuracy)
+            setUserCoordinates({ lat: latitude, lng: longitude })
+            
+            const location = { lat: latitude, lng: longitude, accuracy: accuracy || 100 }
+            
+            // If accuracy is good, use it immediately
+            if (accuracy <= TARGET_ACCURACY) {
+              resolved = true
+              setIsGettingLocation(false)
+              setLocationStatus("Location found!")
+              if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId)
+              }
+              resolve(location)
+              return
+            }
+            
+            // Otherwise, save as best and continue watching
+            if (!bestLocation || accuracy < bestLocation.accuracy) {
+              bestLocation = location
+            }
+            
+            setLocationStatus(`Refining location... ±${Math.round(accuracy)}m`)
+          },
+          (error) => {
+            // Don't show error if we already have a location from watchPosition
+            if (hasReceivedLocation || bestLocation) {
+              return
+            }
+            // Don't resolve on first error - try watchPosition
+            console.log("getCurrentPosition error, trying watchPosition:", error.code)
+          },
+          { 
+            enableHighAccuracy: true, 
+            timeout: 5000, // Fast timeout
+            maximumAge: 0 // Always get fresh location
           }
-          
-          // Accept if accuracy is good enough OR we've tried enough times
-          if (accuracy <= ACCURACY_THRESHOLD || attempts >= maxAttempts) {
-            navigator.geolocation.clearWatch(watchId)
-            setIsGettingLocation(false)
-            resolve(bestLocation)
-          }
-        },
-        (error) => {
-          console.error("Location error:", error)
-          navigator.geolocation.clearWatch(watchId)
-          setIsGettingLocation(false)
-          resolve(bestLocation)
-        },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-      )
+        )
+      }
 
-      // Timeout after 12 seconds
+      // Strategy 2: Watch position for better accuracy (parallel)
+      const tryWatchPosition = () => {
+        watchId = navigator.geolocation.watchPosition(
+          (position) => {
+            if (resolved) return
+            hasReceivedLocation = true
+            const { latitude, longitude, accuracy } = position.coords
+            
+            setLocationAccuracy(accuracy)
+            setUserCoordinates({ lat: latitude, lng: longitude })
+            
+            const location = { lat: latitude, lng: longitude, accuracy: accuracy || 100 }
+            
+            // Update best location
+            if (!bestLocation || accuracy < bestLocation.accuracy) {
+              bestLocation = location
+            }
+            
+            // Accept if accuracy is good enough
+            if (accuracy <= TARGET_ACCURACY) {
+              resolved = true
+              setIsGettingLocation(false)
+              setLocationStatus("Location found!")
+              if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId)
+              }
+              resolve(location)
+              return
+            }
+            
+            setLocationStatus(`Refining location... ±${Math.round(accuracy)}m`)
+          },
+          (error) => {
+            // Handle specific error codes
+            if (resolved) return
+            
+            // If we already have a location, don't show error
+            if (hasReceivedLocation || bestLocation) {
+              return
+            }
+            
+            let errorMessage = ""
+            switch (error.code) {
+              case error.PERMISSION_DENIED:
+                errorMessage = "Location permission denied. Please enable location in your browser settings and refresh the page."
+                break
+              case error.POSITION_UNAVAILABLE:
+                errorMessage = "Location unavailable. Please check your GPS/WiFi settings and try again."
+                break
+              case error.TIMEOUT:
+                // Timeout is OK if we have a location
+                if (bestLocation) {
+                  resolved = true
+                  setIsGettingLocation(false)
+                  setLocationStatus("Location found!")
+                  if (watchId !== null) {
+                    navigator.geolocation.clearWatch(watchId)
+                  }
+                  resolve(bestLocation)
+                  return
+                }
+                errorMessage = "Location request timed out. Please try again."
+                break
+              default:
+                errorMessage = "Could not get location. Please ensure location services are enabled and try again."
+            }
+            
+            // Only show error if we don't have any location
+            if (!bestLocation && !hasReceivedLocation) {
+              setError(errorMessage)
+              resolved = true
+              setIsGettingLocation(false)
+              if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId)
+              }
+              resolve(null)
+            }
+          },
+          { 
+            enableHighAccuracy: true, 
+            timeout: 8000, // 8 second timeout per update
+            maximumAge: 0 // Always get fresh location
+          }
+        )
+      }
+
+      // Try both strategies
+      tryGetCurrentPosition()
+      tryWatchPosition()
+
+      // Overall timeout - accept best location after 6 seconds
       setTimeout(() => {
-        navigator.geolocation.clearWatch(watchId)
-        setIsGettingLocation(false)
-        resolve(bestLocation)
-      }, 12000)
+        if (resolved) return
+        
+        if (bestLocation || hasReceivedLocation) {
+          // Accept best location even if not perfect
+          resolved = true
+          setIsGettingLocation(false)
+          setLocationStatus("Location found!")
+          if (watchId !== null) {
+            navigator.geolocation.clearWatch(watchId)
+          }
+          resolve(bestLocation || { lat: 0, lng: 0, accuracy: 150 })
+        } else {
+          // No location at all - try one more time with lower accuracy requirement
+          setLocationStatus("Trying one more time...")
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              if (resolved) return
+              hasReceivedLocation = true
+              const { latitude, longitude, accuracy } = position.coords
+              const location = { lat: latitude, lng: longitude, accuracy: accuracy || 150 }
+              resolved = true
+              setIsGettingLocation(false)
+              setLocationStatus("Location found!")
+              if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId)
+              }
+              resolve(location)
+            },
+            () => {
+              if (resolved) return
+              // Only show error if we truly never got a location
+              if (!hasReceivedLocation && !bestLocation) {
+                resolved = true
+                setIsGettingLocation(false)
+                setError("Could not get your location. Please ensure location services are enabled in your device settings and browser, then refresh the page and try again.")
+                if (watchId !== null) {
+                  navigator.geolocation.clearWatch(watchId)
+                }
+                resolve(null)
+              } else if (bestLocation) {
+                // We have a location, use it
+                resolved = true
+                setIsGettingLocation(false)
+                setLocationStatus("Location found!")
+                if (watchId !== null) {
+                  navigator.geolocation.clearWatch(watchId)
+                }
+                resolve(bestLocation)
+              }
+            },
+            { 
+              enableHighAccuracy: false, // Lower accuracy for fallback
+              timeout: 5000,
+              maximumAge: 30000 // Accept cached location up to 30 seconds old
+            }
+          )
+        }
+      }, 6000) // 6 second overall timeout
     })
   }, [])
 
@@ -247,28 +430,35 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
 
     setError("")
     setIsLoading(true)
+    setLocationStatus("")
 
     try {
       // Get location with accuracy gate
       const location = await getLocationWithAccuracy()
       if (!location) {
-        setError("Could not get your location. Please enable location services.")
+        // Error message already set by getLocationWithAccuracy
         setIsLoading(false)
+        setIsGettingLocation(false)
         return
       }
 
       setUserCoordinates({ lat: location.lat, lng: location.lng })
       setLocation(`${location.lat.toFixed(6)},${location.lng.toFixed(6)}`)
+      setLocationStatus("Location found! Searching agents...")
 
       // Immediately search for agents
       await searchNearbyAgents({ lat: location.lat, lng: location.lng })
       
       setIsLoading(false)
+      setIsGettingLocation(false)
+      setLocationStatus("")
       setStep("searching")
     } catch (error) {
       console.error("Error:", error)
       setError("Something went wrong. Please try again.")
       setIsLoading(false)
+      setIsGettingLocation(false)
+      setLocationStatus("")
     }
   }
 
@@ -565,7 +755,7 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
               {isLoading ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  {isGettingLocation ? "Getting your location..." : "Finding agents..."}
+                  {isGettingLocation ? (locationStatus || "Getting your location...") : "Finding agents..."}
                 </>
               ) : (
                 <>
@@ -575,10 +765,21 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
               )}
             </Button>
 
-            {locationAccuracy !== null && isLoading && (
-              <p className="text-xs text-center text-muted-foreground">
-                📍 Location accuracy: ±{Math.round(locationAccuracy)}m
-              </p>
+            {isLoading && (
+              <div className="space-y-1">
+                {locationStatus && (
+                  <p className="text-xs text-center text-primary font-medium">
+                    {locationStatus}
+                  </p>
+                )}
+                {locationAccuracy !== null && (
+                  <p className="text-xs text-center text-muted-foreground">
+                    📍 Accuracy: ±{Math.round(locationAccuracy)}m
+                    {locationAccuracy <= 50 && " ✓ Excellent"}
+                    {locationAccuracy > 50 && locationAccuracy <= 100 && " ✓ Good"}
+                  </p>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>

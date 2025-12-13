@@ -257,7 +257,7 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
     } finally {
       setIsLoadingAgents(false)
     }
-  }
+  }, [locationAccuracy])
 
   // Search agents ONLY ONCE when location is locked and accurate
   // No repeated searches - single discovery

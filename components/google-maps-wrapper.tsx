@@ -46,41 +46,16 @@ const defaultCenter = {
   lng: 36.8219,
 }
 
-// Premium Uber-style dark map theme
-const premiumDarkStyle: google.maps.MapTypeStyle[] = [
-  { elementType: "geometry", stylers: [{ color: "#1d1d35" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#1d1d35" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#8ec3b9" }] },
-  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#d4e8e4" }] },
-  { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#1e3d36" }] },
-  { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#6b9a76" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#2c2c4a" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#1d1d35" }] },
-  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#9ca5b3" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#3d3d6b" }] },
-  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1d1d35" }] },
-  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#b0d5ce" }] },
-  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#2c2c4a" }] },
-  { featureType: "transit.station", elementType: "labels.text.fill", stylers: [{ color: "#b0d5ce" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0e1626" }] },
-  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#4e6d70" }] },
-]
-
-// Premium Uber-style light map theme
-const premiumLightStyle: google.maps.MapTypeStyle[] = [
-  { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#f5f5f5" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
-  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#1a1a2e" }] },
-  { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#c8facd" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#e8e8e8" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#fef3c7" }] },
-  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#fcd34d" }] },
-  { featureType: "transit", stylers: [{ visibility: "off" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#c9ebff" }] },
+// Clean Bolt-style map theme - always visible and clear
+const cleanMapStyle: google.maps.MapTypeStyle[] = [
+  // Keep default Google Maps appearance but reduce clutter
+  { featureType: "poi.business", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.attraction", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.government", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.medical", stylers: [{ visibility: "simplified" }] },
+  { featureType: "poi.school", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.sports_complex", stylers: [{ visibility: "off" }] },
+  { featureType: "transit.station.bus", stylers: [{ visibility: "off" }] },
 ]
 
 export function GoogleMapsWrapper({
@@ -97,20 +72,7 @@ export function GoogleMapsWrapper({
   const [directionsService, setDirectionsService] = useState<google.maps.DirectionsService | null>(null)
   const [isMapReady, setIsMapReady] = useState(false)
   const [agentHeading, setAgentHeading] = useState<number>(0)
-  const [isDarkMode, setIsDarkMode] = useState(false)
   const previousAgentLocation = useRef<{ lat: number; lng: number } | null>(null)
-  
-  // Detect system dark mode
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const darkModeQuery = window.matchMedia("(prefers-color-scheme: dark)")
-      setIsDarkMode(darkModeQuery.matches)
-      
-      const handler = (e: MediaQueryListEvent) => setIsDarkMode(e.matches)
-      darkModeQuery.addEventListener("change", handler)
-      return () => darkModeQuery.removeEventListener("change", handler)
-    }
-  }, [])
   
   // Smooth marker animation state
   const [smoothedAgentPos, setSmoothedAgentPos] = useState<{ lat: number; lng: number } | null>(null)
@@ -879,7 +841,7 @@ export function GoogleMapsWrapper({
           rotateControl: false,
           clickableIcons: false,
           gestureHandling: "greedy",
-          styles: isDarkMode ? premiumDarkStyle : premiumLightStyle,
+          styles: cleanMapStyle,
         }}
       >
         {/* User location marker with accurate positioning */}

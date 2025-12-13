@@ -74,41 +74,16 @@ interface PremiumAgentMapProps {
 // Premium map libraries - must match all other components using useJsApiLoader
 const libraries: ("places" | "geometry" | "drawing" | "visualization")[] = ["places", "geometry", "drawing"]
 
-// Premium dark mode map style (Netflix-inspired)
-const premiumDarkStyle: google.maps.MapTypeStyle[] = [
-  { elementType: "geometry", stylers: [{ color: "#0f0f23" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#0f0f23" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#8b8b9e" }] },
-  { featureType: "administrative", elementType: "geometry", stylers: [{ visibility: "off" }] },
-  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#d4d4e8" }] },
-  { featureType: "poi", stylers: [{ visibility: "off" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#1a1a35" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#262645" }] },
-  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#7a7a95" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#2d2d55" }] },
-  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#3d3d70" }] },
-  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#b0b0c5" }] },
-  { featureType: "transit", stylers: [{ visibility: "off" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#080820" }] },
-  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#4a4a6a" }] },
-]
-
-// Premium light mode map style (Apple Maps inspired)
-const premiumLightStyle: google.maps.MapTypeStyle[] = [
-  { elementType: "geometry", stylers: [{ color: "#f8fafc" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#64748b" }] },
-  { featureType: "administrative", elementType: "geometry", stylers: [{ visibility: "off" }] },
-  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#1e293b" }] },
-  { featureType: "poi", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.park", stylers: [{ visibility: "on" }] },
-  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#dcfce7" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#e2e8f0" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#fef3c7" }] },
-  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#fcd34d" }] },
-  { featureType: "transit", stylers: [{ visibility: "off" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#dbeafe" }] },
+// Clean Bolt-style map theme - always visible and clear
+const cleanMapStyle: google.maps.MapTypeStyle[] = [
+  // Keep default Google Maps appearance but reduce clutter
+  { featureType: "poi.business", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.attraction", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.government", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.medical", stylers: [{ visibility: "simplified" }] },
+  { featureType: "poi.school", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.sports_complex", stylers: [{ visibility: "off" }] },
+  { featureType: "transit.station.bus", stylers: [{ visibility: "off" }] },
 ]
 
 const defaultCenter = { lat: -1.2921, lng: 36.8219 }
@@ -599,7 +574,7 @@ export function PremiumAgentMap({
           onLoad={onMapLoad}
           onUnmount={onMapUnmount}
           options={{
-            styles: isDarkMode ? premiumDarkStyle : premiumLightStyle,
+            styles: cleanMapStyle,
             zoomControl: true,
             zoomControlOptions: {
               position: google.maps.ControlPosition.RIGHT_CENTER,

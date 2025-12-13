@@ -110,29 +110,84 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
   const [etaFormatted, setEtaFormatted] = useState<string | null>(null)
   const [routeDistance, setRouteDistance] = useState<number | null>(null)
 
-  // Get user's current location
+  const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null)
+  const [isRefiningLocation, setIsRefiningLocation] = useState(false)
+  const locationWatchCleanup = useRef<(() => void) | null>(null)
+
+  // Get user's current location with continuous refinement (like WhatsApp)
   const captureLocation = async () => {
     try {
+      // Get initial location
       const coords = await getCurrentLocation()
       setUserCoordinates(coords)
+      setLocationAccuracy(coords.accuracy || null)
+      
+      // Start watching location for continuous refinement
+      setIsRefiningLocation(true)
+      
+      // Import watchLocation
+      const { watchLocation } = await import("@/lib/location-utils")
+      
+      // Watch for location updates - gets more accurate over time
+      locationWatchCleanup.current = watchLocation(
+        (location) => {
+          // Update with better location as it becomes available
+          setUserCoordinates({ lat: location.lat, lng: location.lng })
+          setLocationAccuracy(location.accuracy || null)
+          
+          // If accuracy improves significantly, fetch agents again
+          if (location.accuracy && location.accuracy < 50) {
+            // Good accuracy achieved, fetch agents
+            fetchNearbyAgents({ lat: location.lat, lng: location.lng })
+          }
+          
+          // Stop refining after 30 seconds or if accuracy is very good
+          if (location.accuracy && location.accuracy < 20) {
+            setIsRefiningLocation(false)
+          }
+        },
+        (error) => {
+          console.error("Location watch error:", error)
+          setIsRefiningLocation(false)
+        }
+      )
+      
+      // Auto-stop refining after 30 seconds
+      setTimeout(() => {
+        setIsRefiningLocation(false)
+      }, 30000)
+      
       return coords
     } catch (error) {
       console.error("Failed to get location:", error)
+      setIsRefiningLocation(false)
       // Don't block the request if location fails
       return null
     }
   }
 
-  // Fetch nearby agents based on user location
+  // Cleanup location watch on unmount
+  useEffect(() => {
+    return () => {
+      if (locationWatchCleanup.current) {
+        locationWatchCleanup.current()
+      }
+    }
+  }, [])
+
+  // Fetch nearby agents based on user location (called multiple times as location refines)
   const fetchNearbyAgents = async (coords: { lat: number; lng: number }) => {
     setIsLoadingAgents(true)
     setError("")
+    
+    console.log(`🔍 Fetching agents at location: ${coords.lat}, ${coords.lng} (accuracy: ${locationAccuracy ? `±${Math.round(locationAccuracy)}m` : 'unknown'})`)
 
     console.log("🔍 Fetching nearby agents for user at:", coords)
 
     try {
+      // Try with larger radius first (100km), then fallback to 50km
       const response = await fetch(
-        `/api/agents/nearby?lat=${coords.lat}&lng=${coords.lng}&maxDistance=50`
+        `/api/agents/nearby?lat=${coords.lat}&lng=${coords.lng}&maxDistance=100`
       )
       const data = await response.json()
 
@@ -146,9 +201,14 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
         if (data.agents.length === 0) {
           // Provide helpful error message with debug info
           const debugInfo = data.debug
-          let errorMsg = "No agents found nearby"
-          if (debugInfo) {
-            errorMsg += `. Total agents: ${debugInfo.totalAgents}, Available: ${debugInfo.availableAgents}, With GPS: ${debugInfo.agentsWithGPS}, Search radius: ${debugInfo.searchRadius}km`
+          let errorMsg = "No agents found within " + (debugInfo?.searchRadius || 100) + "km"
+          if (debugInfo?.agentDistances && debugInfo.agentDistances.length > 0) {
+            errorMsg += ". Nearest agent: " + debugInfo.agentDistances[0].distance + "km away"
+            if (debugInfo.agentDistances.length > 1) {
+              errorMsg += ` (${debugInfo.agentDistances.length} agents found but outside search radius)`
+            }
+          } else {
+            errorMsg += `. Total agents: ${debugInfo?.totalAgents || 0}, Available: ${debugInfo?.availableAgents || 0}, With GPS: ${debugInfo?.agentsWithGPS || 0}`
           }
           setError(errorMsg)
         } else {
@@ -174,10 +234,25 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
     }
   }
 
+  // Continuously refine location and fetch agents (like WhatsApp live location)
+  useEffect(() => {
+    if (!userCoordinates || step !== "select_agent") return
+
+    // Set up interval to keep fetching agents as location refines
+    const refineInterval = setInterval(() => {
+      if (userCoordinates) {
+        fetchNearbyAgents(userCoordinates)
+      }
+    }, 3000) // Fetch every 3 seconds as location improves
+
+    return () => clearInterval(refineInterval)
+  }, [userCoordinates, step])
+
   // Start map selection after entering amount - automatically get location and show agents
   const startMapSelection = async () => {
     setIsLoading(true)
     setError("")
+    setIsRefiningLocation(true)
 
     try {
       // Get GPS location first
@@ -691,6 +766,20 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
           </p>
         </div>
 
+        {/* Location Refining Indicator (like WhatsApp) */}
+        {isRefiningLocation && (
+          <Alert className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800 text-xs sm:text-sm">
+            <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+            <AlertDescription className="text-blue-800 dark:text-blue-200">
+              <span className="font-semibold">Refining your location...</span>
+              {locationAccuracy && (
+                <span className="ml-2">Accuracy: ±{Math.round(locationAccuracy)}m</span>
+              )}
+              <span className="block mt-1 text-xs">Searching for agents as location improves...</span>
+            </AlertDescription>
+          </Alert>
+        )}
+
         {error && (
           <Alert variant="destructive" className="text-xs sm:text-sm">
             <AlertCircle className="h-4 w-4" />
@@ -704,7 +793,14 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
             <CardContent className="py-8 sm:py-12 px-4 sm:px-6">
               <div className="flex flex-col items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-                <p className="text-sm sm:text-base text-muted-foreground">Finding nearby agents...</p>
+                <p className="text-sm sm:text-base text-muted-foreground">
+                  {isRefiningLocation ? "Refining location and searching for agents..." : "Finding nearby agents..."}
+                </p>
+                {locationAccuracy && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Location accuracy: ±{Math.round(locationAccuracy)}m
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -714,16 +810,23 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
               <div className="flex flex-col items-center justify-center text-center">
                 <AlertCircle className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground mb-4" />
                 <p className="text-sm sm:text-base text-muted-foreground">No agents found nearby</p>
-                <p className="text-xs sm:text-sm text-muted-foreground mt-2">
-                  Try again later or expand your search area
-                </p>
+                {isRefiningLocation ? (
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-2">
+                    Location is still refining... Keep waiting, agents may appear as accuracy improves
+                  </p>
+                ) : (
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-2">
+                    Try again later or expand your search area
+                  </p>
+                )}
                 <Button
                   variant="outline"
                   onClick={startMapSelection}
                   className="mt-4 w-full sm:w-auto"
+                  disabled={isRefiningLocation}
                 >
                   <RefreshCw className="h-4 w-4 mr-2" />
-                  Refresh
+                  {isRefiningLocation ? "Refining..." : "Refresh"}
                 </Button>
               </div>
             </CardContent>

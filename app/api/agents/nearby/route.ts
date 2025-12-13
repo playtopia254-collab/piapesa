@@ -10,7 +10,8 @@ export async function GET(request: NextRequest) {
     const requestId = searchParams.get("requestId")
     const userLat = searchParams.get("lat")
     const userLng = searchParams.get("lng")
-    const maxDistance = Number.parseFloat(searchParams.get("maxDistance") || "50") // Default 50km (increased for better coverage)
+    // Allow up to 100km search radius, default 50km
+    const maxDistance = Math.min(Number.parseFloat(searchParams.get("maxDistance") || "50"), 100) // Default 50km, max 100km
 
     if (!userLat || !userLng) {
       return NextResponse.json(
@@ -116,8 +117,12 @@ export async function GET(request: NextRequest) {
         )
 
         console.log(`   Distance: ${distance.toFixed(2)}km (max: ${maxDistance}km)`)
-
-        if (distance > maxDistance) return null
+        
+        // Log if agent is outside radius but close
+        if (distance > maxDistance) {
+          console.log(`   ⚠️ Agent ${agent._id} (${agent.name}) is ${distance.toFixed(2)}km away (outside ${maxDistance}km radius)`)
+          return null
+        }
 
         return {
           id: agent._id.toString(),
@@ -180,6 +185,21 @@ export async function GET(request: NextRequest) {
       console.log(`  - Agents with GPS: ${agents.length}`)
       console.log(`  - Search radius: ${maxDistance}km`)
       console.log(`  - User location: ${userLatNum}, ${userLngNum}`)
+      
+      // Calculate and log distances for all agents (even if outside radius)
+      console.log("\n📍 All agents and their distances:")
+      agents.forEach((agent) => {
+        const agentLocation = agent.lastKnownLocation || agent.location
+        if (agentLocation?.lat && agentLocation?.lng) {
+          const dist = calculateDistance(
+            userLatNum,
+            userLngNum,
+            agentLocation.lat,
+            agentLocation.lng
+          )
+          console.log(`  - ${agent.name}: ${dist.toFixed(2)}km away (Available: ${agent.isAvailable || false})`)
+        }
+      })
     }
 
     return NextResponse.json({
@@ -195,6 +215,24 @@ export async function GET(request: NextRequest) {
         availableAgents: availableAgents.length,
         agentsWithGPS: agents.length,
         searchRadius: maxDistance,
+        // Include distances to all agents for debugging
+        agentDistances: agents.map((agent) => {
+          const agentLocation = agent.lastKnownLocation || agent.location
+          if (agentLocation?.lat && agentLocation?.lng) {
+            const dist = calculateDistance(
+              userLatNum,
+              userLngNum,
+              agentLocation.lat,
+              agentLocation.lng
+            )
+            return {
+              name: agent.name,
+              distance: dist.toFixed(2),
+              isAvailable: agent.isAvailable || false,
+            }
+          }
+          return null
+        }).filter(Boolean),
       } : undefined,
     })
   } catch (error) {

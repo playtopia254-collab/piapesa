@@ -112,61 +112,95 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
 
   const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null)
   const [isRefiningLocation, setIsRefiningLocation] = useState(false)
-  const [searchStartTime, setSearchStartTime] = useState<number | null>(null)
-  const [minSearchElapsed, setMinSearchElapsed] = useState(false)
+  const [clientLocationLocked, setClientLocationLocked] = useState(false)
+  const [isWaitingForAccuracy, setIsWaitingForAccuracy] = useState(false)
   const locationWatchCleanup = useRef<(() => void) | null>(null)
-  const MIN_SEARCH_DURATION = 8000 // Minimum 8 seconds of searching to allow GPS to refine
+  const hasSearchedAgents = useRef(false) // Prevent multiple searches
+  const mapInitialized = useRef(false) // Prevent map re-initialization
+  const ACCURACY_THRESHOLD = 100 // Only search when accuracy ≤ 100m
+  const MIN_WAIT_TIME = 6000 // Minimum 6 seconds wait time
 
-  // Get user's current location with continuous refinement (like WhatsApp)
-  const captureLocation = async () => {
-    try {
-      // Get initial location
-      const coords = await getCurrentLocation()
-      setUserCoordinates(coords)
-      setLocationAccuracy(coords.accuracy || null)
-      
-      // Start watching location for continuous refinement
+  // Get user's current location with accuracy gate (Uber-like)
+  // Waits for ≤100m accuracy before proceeding
+  const captureLocationWithAccuracyGate = async (): Promise<{ lat: number; lng: number } | null> => {
+    return new Promise((resolve) => {
+      setIsWaitingForAccuracy(true)
       setIsRefiningLocation(true)
+      const startTime = Date.now()
       
       // Import watchLocation
-      const { watchLocation } = await import("@/lib/location-utils")
-      
-      // Watch for location updates - gets more accurate over time
-      locationWatchCleanup.current = watchLocation(
-        (location) => {
-          // Update with better location as it becomes available
-          setUserCoordinates({ lat: location.lat, lng: location.lng })
-          setLocationAccuracy(location.accuracy || null)
-          
-          // If accuracy improves significantly, fetch agents again
-          if (location.accuracy && location.accuracy < 50) {
-            // Good accuracy achieved, fetch agents
-            fetchNearbyAgents({ lat: location.lat, lng: location.lng })
-          }
-          
-          // Stop refining after 30 seconds or if accuracy is very good
-          if (location.accuracy && location.accuracy < 20) {
+      import("@/lib/location-utils").then(({ watchLocation }) => {
+        let bestLocation: { lat: number; lng: number; accuracy: number } | null = null
+        let hasLocked = false
+        
+        // Watch for location updates - wait for accuracy ≤ 100m
+        locationWatchCleanup.current = watchLocation(
+          (location) => {
+            const accuracy = location.accuracy || Infinity
+            
+            // Update UI with current accuracy
+            setUserCoordinates({ lat: location.lat, lng: location.lng })
+            setLocationAccuracy(accuracy)
+            
+            // Track best location
+            if (!bestLocation || accuracy < bestLocation.accuracy) {
+              bestLocation = { lat: location.lat, lng: location.lng, accuracy }
+            }
+            
+            // Check if we meet accuracy threshold AND minimum wait time
+            const elapsed = Date.now() - startTime
+            const meetsAccuracy = accuracy <= ACCURACY_THRESHOLD
+            const meetsMinTime = elapsed >= MIN_WAIT_TIME
+            
+            // Lock location when both conditions are met
+            if (meetsAccuracy && meetsMinTime && !hasLocked) {
+              hasLocked = true
+              setClientLocationLocked(true)
+              setIsWaitingForAccuracy(false)
+              
+              // Stop watching GPS
+              if (locationWatchCleanup.current) {
+                locationWatchCleanup.current()
+                locationWatchCleanup.current = null
+              }
+              
+              // Freeze for 1-2 seconds for smooth UX
+              setTimeout(() => {
+                setIsRefiningLocation(false)
+                // Resolve with locked location
+                resolve({ lat: location.lat, lng: location.lng })
+              }, 1500)
+            }
+          },
+          (error) => {
+            console.error("Location watch error:", error)
+            setIsWaitingForAccuracy(false)
             setIsRefiningLocation(false)
+            // Resolve with best location we have, or null
+            resolve(bestLocation ? { lat: bestLocation.lat, lng: bestLocation.lng } : null)
           }
-        },
-        (error) => {
-          console.error("Location watch error:", error)
-          setIsRefiningLocation(false)
-        }
-      )
-      
-      // Auto-stop refining after 30 seconds
-      setTimeout(() => {
-        setIsRefiningLocation(false)
-      }, 30000)
-      
-      return coords
-    } catch (error) {
-      console.error("Failed to get location:", error)
-      setIsRefiningLocation(false)
-      // Don't block the request if location fails
-      return null
-    }
+        )
+        
+        // Fallback: If 30 seconds pass without meeting threshold, use best location
+        setTimeout(() => {
+          if (!hasLocked && bestLocation) {
+            hasLocked = true
+            setClientLocationLocked(true)
+            setIsWaitingForAccuracy(false)
+            
+            if (locationWatchCleanup.current) {
+              locationWatchCleanup.current()
+              locationWatchCleanup.current = null
+            }
+            
+            setTimeout(() => {
+              setIsRefiningLocation(false)
+              resolve({ lat: bestLocation!.lat, lng: bestLocation!.lng })
+            }, 1500)
+          }
+        }, 30000)
+      })
+    })
   }
 
   // Cleanup location watch on unmount
@@ -178,19 +212,17 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
     }
   }, [])
 
-  // Fetch nearby agents based on user location (called multiple times as location refines)
-  const fetchNearbyAgents = async (coords: { lat: number; lng: number }) => {
+  // Fetch nearby agents - SINGLE SEARCH with 100m radius
+  const fetchNearbyAgents = useCallback(async (coords: { lat: number; lng: number }) => {
     setIsLoadingAgents(true)
     setError("")
     
-    console.log(`🔍 Fetching agents at location: ${coords.lat}, ${coords.lng} (accuracy: ${locationAccuracy ? `±${Math.round(locationAccuracy)}m` : 'unknown'})`)
-
-    console.log("🔍 Fetching nearby agents for user at:", coords)
+    console.log(`🔍 Searching agents at: ${coords.lat}, ${coords.lng} (accuracy: ${locationAccuracy ? `±${Math.round(locationAccuracy)}m` : 'unknown'})`)
 
     try {
-      // Try with larger radius first (100km), then fallback to 50km
+      // Search with 100m radius (Uber-like precision)
       const response = await fetch(
-        `/api/agents/nearby?lat=${coords.lat}&lng=${coords.lng}&maxDistance=100`
+        `/api/agents/nearby?lat=${coords.lat}&lng=${coords.lng}&maxDistance=0.1`
       )
       const data = await response.json()
 
@@ -202,18 +234,8 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
 
       if (data.success && data.agents) {
         if (data.agents.length === 0) {
-          // Provide helpful error message with debug info
-          const debugInfo = data.debug
-          let errorMsg = "No agents found within " + (debugInfo?.searchRadius || 100) + "km"
-          if (debugInfo?.agentDistances && debugInfo.agentDistances.length > 0) {
-            errorMsg += ". Nearest agent: " + debugInfo.agentDistances[0].distance + "km away"
-            if (debugInfo.agentDistances.length > 1) {
-              errorMsg += ` (${debugInfo.agentDistances.length} agents found but outside search radius)`
-            }
-          } else {
-            errorMsg += `. Total agents: ${debugInfo?.totalAgents || 0}, Available: ${debugInfo?.availableAgents || 0}, With GPS: ${debugInfo?.agentsWithGPS || 0}`
-          }
-          setError(errorMsg)
+          // No agents found - will continue passive scanning
+          setError("")
         } else {
           setNearbyAgents(data.agents.map((agent: any) => ({
             id: agent.id,
@@ -237,61 +259,117 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
     }
   }
 
-  // Continuously refine location and fetch agents (like WhatsApp live location)
+  // Search agents ONLY ONCE when location is locked and accurate
+  // No repeated searches - single discovery
   useEffect(() => {
-    if (!userCoordinates || step !== "map") return
+    if (!clientLocationLocked || !userCoordinates || step !== "map" || hasSearchedAgents.current) {
+      return
+    }
 
-    // Set up interval to keep fetching agents as location refines
-    const refineInterval = setInterval(() => {
-      if (userCoordinates) {
+    // Mark as searched to prevent re-searching
+    hasSearchedAgents.current = true
+    
+    // Single agent search with 100m radius
+    fetchNearbyAgents(userCoordinates)
+  }, [clientLocationLocked, userCoordinates, step, fetchNearbyAgents])
+
+  // Passive scanning: If no agents found, scan every 5 seconds (without reloading)
+  useEffect(() => {
+    if (!clientLocationLocked || !userCoordinates || step !== "map" || nearbyAgents.length > 0) {
+      return
+    }
+
+    // Passive scan every 5 seconds
+    const scanInterval = setInterval(() => {
+      if (userCoordinates && nearbyAgents.length === 0) {
         fetchNearbyAgents(userCoordinates)
       }
-    }, 3000) // Fetch every 3 seconds as location improves
+    }, 5000)
 
-    return () => clearInterval(refineInterval)
-  }, [userCoordinates, step, fetchNearbyAgents])
+    return () => clearInterval(scanInterval)
+  }, [clientLocationLocked, userCoordinates, step, nearbyAgents.length, fetchNearbyAgents])
 
-  // Start map selection after entering amount - automatically get location and show agents
+  // Real-time distance updates for agents (every 2 seconds, no reload)
+  useEffect(() => {
+    if (!userCoordinates || nearbyAgents.length === 0 || step !== "map") {
+      return
+    }
+
+    const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+      const R = 6371000 // Earth's radius in meters
+      const dLat = (lat2 - lat1) * Math.PI / 180
+      const dLon = (lon2 - lon1) * Math.PI / 180
+      const a = 
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2)
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+      return R * c // Distance in meters
+    }
+
+    const updateDistances = () => {
+      setNearbyAgents(prevAgents => 
+        prevAgents.map(agent => {
+          if (!agent.location || !userCoordinates) return agent
+          
+          // Calculate real-time distance using Haversine formula
+          const distanceMeters = Math.round(
+            calculateDistance(
+              userCoordinates.lat,
+              userCoordinates.lng,
+              agent.location.lat,
+              agent.location.lng
+            )
+          )
+          
+          return {
+            ...agent,
+            distance: distanceMeters / 1000, // Convert to km
+            distanceFormatted: distanceMeters < 1000 
+              ? `${distanceMeters}m away` 
+              : `${(distanceMeters / 1000).toFixed(1)}km away`
+          }
+        })
+      )
+    }
+
+    // Update immediately
+    updateDistances()
+    
+    // Then update every 2 seconds for real-time feel
+    const distanceInterval = setInterval(updateDistances, 2000)
+
+    return () => clearInterval(distanceInterval)
+  }, [userCoordinates, step, nearbyAgents.length])
+
+  // Start map selection - wait for accurate GPS before searching
   const startMapSelection = async () => {
     setIsLoading(true)
     setError("")
-    setIsRefiningLocation(true)
-    setMinSearchElapsed(false)
-    const startTime = Date.now()
-    setSearchStartTime(startTime)
+    hasSearchedAgents.current = false // Reset search flag
+    setClientLocationLocked(false)
 
     try {
-      // Get GPS location first
-      const coords = await captureLocation()
+      // Wait for accurate location (≤100m) - this will show loading screen
+      const coords = await captureLocationWithAccuracyGate()
+      
       if (!coords) {
         setError("Please enable location access to find nearby agents")
         setIsLoading(false)
         setIsRefiningLocation(false)
+        setIsWaitingForAccuracy(false)
         return
       }
 
-      // Set location description from coordinates (reverse geocoding would be ideal, but for now use coordinates)
+      // Set location description
       setLocation(`${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`)
 
-      // Fetch nearby agents immediately
-      await fetchNearbyAgents(coords)
-
-      // Move to map step
+      // Move to map step - agent search will happen automatically via useEffect
       setStep("map")
-      
-      // Set minimum search duration timer - keep searching for at least 8 seconds
-      setTimeout(() => {
-        setMinSearchElapsed(true)
-        // Fetch one more time after minimum duration with current coordinates
-        // Use the coords we just got, or userCoordinates if it's been updated
-        const currentCoords = userCoordinates || coords
-        if (currentCoords) {
-          fetchNearbyAgents(currentCoords)
-        }
-      }, MIN_SEARCH_DURATION)
     } catch (error) {
       setError("Failed to get your location. Please enable location access.")
       setIsRefiningLocation(false)
+      setIsWaitingForAccuracy(false)
     } finally {
       setIsLoading(false)
     }
@@ -785,18 +863,39 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
           </p>
         </div>
 
-        {/* Location Refining Indicator (like WhatsApp) */}
-        {isRefiningLocation && (
-          <Alert className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800 text-xs sm:text-sm">
-            <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-            <AlertDescription className="text-blue-800 dark:text-blue-200">
-              <span className="font-semibold">Refining your location...</span>
-              {locationAccuracy && (
-                <span className="ml-2">Accuracy: ±{Math.round(locationAccuracy)}m</span>
-              )}
-              <span className="block mt-1 text-xs">Searching for agents as location improves...</span>
-            </AlertDescription>
-          </Alert>
+        {/* Full-Screen Loading: Waiting for GPS Accuracy */}
+        {isWaitingForAccuracy && (
+          <Card className="border-2 border-blue-200 dark:border-blue-800">
+            <CardContent className="py-12 sm:py-16 px-4 sm:px-6">
+              <div className="flex flex-col items-center justify-center text-center space-y-4">
+                <Loader2 className="h-12 w-12 sm:h-16 sm:w-16 animate-spin text-blue-600" />
+                <div className="space-y-2">
+                  <h3 className="text-lg sm:text-xl font-semibold">Finding nearby agents...</h3>
+                  <p className="text-sm sm:text-base text-muted-foreground">Getting a more accurate location</p>
+                </div>
+                {locationAccuracy !== null && (
+                  <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <p className="text-xs sm:text-sm text-blue-600 dark:text-blue-400 font-medium mb-1">
+                      GPS Accuracy
+                    </p>
+                    <p className="text-2xl sm:text-3xl font-bold text-blue-700 dark:text-blue-300">
+                      ±{Math.round(locationAccuracy)}m
+                    </p>
+                    {locationAccuracy > ACCURACY_THRESHOLD && (
+                      <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
+                        Waiting for accuracy ≤ {ACCURACY_THRESHOLD}m...
+                      </p>
+                    )}
+                    {locationAccuracy <= ACCURACY_THRESHOLD && (
+                      <p className="text-xs text-green-600 dark:text-green-400 mt-2">
+                        ✓ Location locked! Searching for agents...
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {error && (
@@ -806,25 +905,15 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
           </Alert>
         )}
 
-        {/* Map Component */}
-        {(isLoadingAgents || !minSearchElapsed) ? (
+        {/* Map Component - Only show when location is locked */}
+        {isWaitingForAccuracy ? null : isLoadingAgents ? (
           <Card>
             <CardContent className="py-8 sm:py-12 px-4 sm:px-6">
               <div className="flex flex-col items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
                 <p className="text-sm sm:text-base text-muted-foreground">
-                  {isRefiningLocation ? "Refining location and searching for agents..." : "Searching for nearby agents..."}
+                  Searching for agents within 100m...
                 </p>
-                {locationAccuracy && (
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Location accuracy: ±{Math.round(locationAccuracy)}m
-                  </p>
-                )}
-                {!minSearchElapsed && (
-                  <p className="text-xs text-muted-foreground mt-2 animate-pulse">
-                    Getting more accurate location...
-                  </p>
-                )}
               </div>
             </CardContent>
           </Card>
@@ -833,19 +922,13 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
             <CardContent className="py-8 sm:py-12 px-4 sm:px-6">
               <div className="flex flex-col items-center justify-center text-center">
                 <AlertCircle className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground mb-4" />
-                <p className="text-sm sm:text-base text-muted-foreground">No agents found nearby</p>
-                {isRefiningLocation ? (
-                  <p className="text-xs sm:text-sm text-muted-foreground mt-2">
-                    Location is still refining... Keep waiting, agents may appear as accuracy improves
-                  </p>
-                ) : (
-                  <p className="text-xs sm:text-sm text-muted-foreground mt-2">
-                    Try again later or expand your search area
-                  </p>
-                )}
+                <p className="text-sm sm:text-base text-muted-foreground">No agents within 100m yet</p>
+                <p className="text-xs sm:text-sm text-muted-foreground mt-2">
+                  Still searching...
+                </p>
                 {locationAccuracy && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    Final location accuracy: ±{Math.round(locationAccuracy)}m
+                    Location accuracy: ±{Math.round(locationAccuracy)}m
                   </p>
                 )}
                 <Button
@@ -861,23 +944,79 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
             </CardContent>
           </Card>
         ) : (
-          <div className="h-[400px] sm:h-[500px] w-full relative z-0">
-            <UberAgentTrackingMap
-              onSelectAgent={(agent) => {
-                handleAgentSelect({
-                  id: agent.id,
-                  name: agent.name,
-                  phone: agent.phone,
-                  location: agent.location,
-                  rating: agent.rating,
-                  totalTransactions: agent.totalTransactions,
-                  distance: agent.distance || 0,
-                  distanceFormatted: agent.distanceFormatted || "0m",
-                })
-              }}
-              selectedAgentId={selectedAgent?.id || null}
-              height="100%"
-            />
+          <div className="space-y-4">
+            {/* Map with agents - single initialization, no reloads */}
+            <div className="h-[400px] sm:h-[500px] w-full relative z-0">
+              <GoogleMapsWrapper
+                  userLocation={userCoordinates}
+                  agents={nearbyAgents.map(agent => ({
+                    id: agent.id,
+                    name: agent.name,
+                    phone: agent.phone,
+                    location: agent.location,
+                    rating: agent.rating,
+                    totalTransactions: agent.totalTransactions,
+                    distance: agent.distance || 0,
+                    distanceFormatted: agent.distanceFormatted || "0m",
+                  }))}
+                  selectedAgent={selectedAgent ? { id: selectedAgent.id } : null}
+                  onSelectAgent={(agent) => {
+                    handleAgentSelect({
+                      id: agent.id,
+                      name: agent.name,
+                      phone: agent.phone,
+                      location: agent.location,
+                      rating: agent.rating,
+                      totalTransactions: agent.totalTransactions,
+                      distance: agent.distance || 0,
+                      distanceFormatted: agent.distanceFormatted || "0m",
+                    })
+                  }}
+                  showRoute={false}
+                />
+            </div>
+            
+            {/* Real-time distance updates for agents */}
+            {nearbyAgents.length > 0 && userCoordinates && (
+              <div className="space-y-2">
+                  {nearbyAgents.map((agent) => {
+                  // Use distance from agent object (updated in real-time)
+                  const realTimeDistance = agent.distance ? Math.round(agent.distance * 1000) : 0
+                  
+                  return (
+                    <Card
+                      key={agent.id}
+                      className={`cursor-pointer transition-all ${
+                        selectedAgent?.id === agent.id
+                          ? "border-green-500 bg-green-50 dark:bg-green-950"
+                          : "hover:border-primary"
+                      }`}
+                      onClick={() => handleAgentSelect(agent)}
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                              <User className="h-5 w-5 text-primary" />
+                            </div>
+                            <div>
+                              <p className="font-semibold">{agent.name}</p>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                                <span>{agent.rating}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <Badge className="text-sm font-semibold">
+                            {realTimeDistance < 1000 ? `${realTimeDistance}m away` : `${(realTimeDistance / 1000).toFixed(1)}km away`}
+                          </Badge>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
 

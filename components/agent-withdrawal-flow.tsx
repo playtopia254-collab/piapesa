@@ -173,209 +173,158 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
 
       setIsGettingLocation(true)
       setLocationStatus("Getting your location...")
-      let bestLocation: { lat: number; lng: number; accuracy: number } | null = null
       let resolved = false
       let watchId: number | null = null
-      let hasReceivedLocation = false
+      let timeoutId: NodeJS.Timeout | null = null
 
-      // Strategy 1: Try getCurrentPosition first (fastest, single shot)
-      const tryGetCurrentPosition = () => {
+      // Strategy 1: FAST - Use cached location (instant if available)
+      const tryFastCached = () => {
         navigator.geolocation.getCurrentPosition(
           (position) => {
             if (resolved) return
-            hasReceivedLocation = true
             const { latitude, longitude, accuracy } = position.coords
+            const location = { lat: latitude, lng: longitude, accuracy: accuracy || 200 }
             
             setLocationAccuracy(accuracy)
             setUserCoordinates({ lat: latitude, lng: longitude })
+            resolved = true
+            setIsGettingLocation(false)
+            setLocationStatus("Location found!")
             
-            const location = { lat: latitude, lng: longitude, accuracy: accuracy || 100 }
+            if (watchId !== null) navigator.geolocation.clearWatch(watchId)
+            if (timeoutId !== null) clearTimeout(timeoutId)
             
-            // If accuracy is good, use it immediately
-            if (accuracy <= TARGET_ACCURACY) {
-              resolved = true
-              setIsGettingLocation(false)
-              setLocationStatus("Location found!")
-              if (watchId !== null) {
-                navigator.geolocation.clearWatch(watchId)
-              }
-              resolve(location)
-              return
-            }
-            
-            // Otherwise, save as best and continue watching
-            if (!bestLocation || accuracy < bestLocation.accuracy) {
-              bestLocation = location
-            }
-            
-            setLocationStatus(`Refining location... ±${Math.round(accuracy)}m`)
+            resolve(location)
           },
-          (error) => {
-            // Don't show error if we already have a location from watchPosition
-            if (hasReceivedLocation || bestLocation) {
-              return
-            }
-            // Don't resolve on first error - try watchPosition
-            console.log("getCurrentPosition error, trying watchPosition:", error.code)
-          },
+          () => {}, // Silent fail - other strategies will try
           { 
-            enableHighAccuracy: true, 
-            timeout: 5000, // Fast timeout
-            maximumAge: 0 // Always get fresh location
+            enableHighAccuracy: false, // Fast - use network/cached
+            timeout: 2000,
+            maximumAge: 120000 // Accept location up to 2 minutes old
           }
         )
       }
 
-      // Strategy 2: Watch position for better accuracy (parallel)
-      const tryWatchPosition = () => {
+      // Strategy 2: High accuracy (parallel)
+      const tryHighAccuracy = () => {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            if (resolved) return
+            const { latitude, longitude, accuracy } = position.coords
+            const location = { lat: latitude, lng: longitude, accuracy: accuracy || 200 }
+            
+            setLocationAccuracy(accuracy)
+            setUserCoordinates({ lat: latitude, lng: longitude })
+            resolved = true
+            setIsGettingLocation(false)
+            setLocationStatus("Location found!")
+            
+            if (watchId !== null) navigator.geolocation.clearWatch(watchId)
+            if (timeoutId !== null) clearTimeout(timeoutId)
+            
+            resolve(location)
+          },
+          () => {}, // Silent fail
+          { 
+            enableHighAccuracy: true,
+            timeout: 3000,
+            maximumAge: 0
+          }
+        )
+      }
+
+      // Strategy 3: Watch position (continuous)
+      const tryWatch = () => {
         watchId = navigator.geolocation.watchPosition(
           (position) => {
             if (resolved) return
-            hasReceivedLocation = true
             const { latitude, longitude, accuracy } = position.coords
+            const location = { lat: latitude, lng: longitude, accuracy: accuracy || 200 }
             
             setLocationAccuracy(accuracy)
             setUserCoordinates({ lat: latitude, lng: longitude })
             
-            const location = { lat: latitude, lng: longitude, accuracy: accuracy || 100 }
+            // Accept immediately - no waiting
+            resolved = true
+            setIsGettingLocation(false)
+            setLocationStatus("Location found!")
             
-            // Update best location
-            if (!bestLocation || accuracy < bestLocation.accuracy) {
-              bestLocation = location
-            }
+            if (watchId !== null) navigator.geolocation.clearWatch(watchId)
+            if (timeoutId !== null) clearTimeout(timeoutId)
             
-            // Accept if accuracy is good enough
-            if (accuracy <= TARGET_ACCURACY) {
-              resolved = true
-              setIsGettingLocation(false)
-              setLocationStatus("Location found!")
-              if (watchId !== null) {
-                navigator.geolocation.clearWatch(watchId)
-              }
-              resolve(location)
-              return
-            }
+            resolve(location)
+          },
+          () => {}, // Silent fail
+          { 
+            enableHighAccuracy: true,
+            timeout: 4000,
+            maximumAge: 0
+          }
+        )
+      }
+
+      // Strategy 4: Final fallback (very permissive)
+      const tryFinalFallback = () => {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            if (resolved) return
+            const { latitude, longitude, accuracy } = position.coords
+            const location = { lat: latitude, lng: longitude, accuracy: accuracy || 200 }
             
-            setLocationStatus(`Refining location... ±${Math.round(accuracy)}m`)
+            setLocationAccuracy(accuracy)
+            setUserCoordinates({ lat: latitude, lng: longitude })
+            resolved = true
+            setIsGettingLocation(false)
+            setLocationStatus("Location found!")
+            
+            if (watchId !== null) navigator.geolocation.clearWatch(watchId)
+            if (timeoutId !== null) clearTimeout(timeoutId)
+            
+            resolve(location)
           },
           (error) => {
-            // Handle specific error codes
+            // Only show error if ALL strategies failed
             if (resolved) return
-            
-            // If we already have a location, don't show error
-            if (hasReceivedLocation || bestLocation) {
-              return
-            }
             
             let errorMessage = ""
             switch (error.code) {
               case error.PERMISSION_DENIED:
-                errorMessage = "Location permission denied. Please enable location in your browser settings and refresh the page."
+                errorMessage = "Location permission denied. Please enable location in your browser settings."
                 break
               case error.POSITION_UNAVAILABLE:
-                errorMessage = "Location unavailable. Please check your GPS/WiFi settings and try again."
-                break
-              case error.TIMEOUT:
-                // Timeout is OK if we have a location
-                if (bestLocation) {
-                  resolved = true
-                  setIsGettingLocation(false)
-                  setLocationStatus("Location found!")
-                  if (watchId !== null) {
-                    navigator.geolocation.clearWatch(watchId)
-                  }
-                  resolve(bestLocation)
-                  return
-                }
-                errorMessage = "Location request timed out. Please try again."
+                errorMessage = "Location unavailable. Please check your GPS/WiFi settings."
                 break
               default:
-                errorMessage = "Could not get location. Please ensure location services are enabled and try again."
+                errorMessage = "Could not get location. Please ensure location services are enabled."
             }
             
-            // Only show error if we don't have any location
-            if (!bestLocation && !hasReceivedLocation) {
-              setError(errorMessage)
-              resolved = true
-              setIsGettingLocation(false)
-              if (watchId !== null) {
-                navigator.geolocation.clearWatch(watchId)
-              }
-              resolve(null)
-            }
+            resolved = true
+            setIsGettingLocation(false)
+            setError(errorMessage)
+            
+            if (watchId !== null) navigator.geolocation.clearWatch(watchId)
+            if (timeoutId !== null) clearTimeout(timeoutId)
+            
+            resolve(null)
           },
           { 
-            enableHighAccuracy: true, 
-            timeout: 8000, // 8 second timeout per update
-            maximumAge: 0 // Always get fresh location
+            enableHighAccuracy: false,
+            timeout: 5000,
+            maximumAge: 300000 // Accept location up to 5 minutes old
           }
         )
       }
 
-      // Try both strategies
-      tryGetCurrentPosition()
-      tryWatchPosition()
-
-      // Overall timeout - accept best location after 6 seconds
-      setTimeout(() => {
+      // Try all strategies in parallel
+      tryFastCached() // Fastest - uses cached location
+      tryHighAccuracy() // Better accuracy
+      tryWatch() // Continuous updates
+      
+      // Final fallback after 3 seconds
+      timeoutId = setTimeout(() => {
         if (resolved) return
-        
-        if (bestLocation || hasReceivedLocation) {
-          // Accept best location even if not perfect
-          resolved = true
-          setIsGettingLocation(false)
-          setLocationStatus("Location found!")
-          if (watchId !== null) {
-            navigator.geolocation.clearWatch(watchId)
-          }
-          resolve(bestLocation || { lat: 0, lng: 0, accuracy: 150 })
-        } else {
-          // No location at all - try one more time with lower accuracy requirement
-          setLocationStatus("Trying one more time...")
-          navigator.geolocation.getCurrentPosition(
-            (position) => {
-              if (resolved) return
-              hasReceivedLocation = true
-              const { latitude, longitude, accuracy } = position.coords
-              const location = { lat: latitude, lng: longitude, accuracy: accuracy || 150 }
-              resolved = true
-              setIsGettingLocation(false)
-              setLocationStatus("Location found!")
-              if (watchId !== null) {
-                navigator.geolocation.clearWatch(watchId)
-              }
-              resolve(location)
-            },
-            () => {
-              if (resolved) return
-              // Only show error if we truly never got a location
-              if (!hasReceivedLocation && !bestLocation) {
-                resolved = true
-                setIsGettingLocation(false)
-                setError("Could not get your location. Please ensure location services are enabled in your device settings and browser, then refresh the page and try again.")
-                if (watchId !== null) {
-                  navigator.geolocation.clearWatch(watchId)
-                }
-                resolve(null)
-              } else if (bestLocation) {
-                // We have a location, use it
-                resolved = true
-                setIsGettingLocation(false)
-                setLocationStatus("Location found!")
-                if (watchId !== null) {
-                  navigator.geolocation.clearWatch(watchId)
-                }
-                resolve(bestLocation)
-              }
-            },
-            { 
-              enableHighAccuracy: false, // Lower accuracy for fallback
-              timeout: 5000,
-              maximumAge: 30000 // Accept cached location up to 30 seconds old
-            }
-          )
-        }
-      }, 6000) // 6 second overall timeout
+        tryFinalFallback()
+      }, 3000)
     })
   }, [])
 

@@ -94,6 +94,8 @@ export default function AgentDashboardPage() {
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null)
   const [isWaitingForAccuracy, setIsWaitingForAccuracy] = useState(false)
   const locationWatchIdRef = useRef<number | null>(null)
+  const isGettingLocationRef = useRef(false) // Prevent duplicate GPS requests
+  const locationPermissionDeniedRef = useRef(false) // Track permission denial
   const ACCURACY_THRESHOLD = 100 // Agent must have ≤100m accuracy to go online
   const [stats, setStats] = useState({
     activeRequests: 0,
@@ -257,14 +259,29 @@ export default function AgentDashboardPage() {
   // Start GPS accuracy check before going online
   const startAccuracyCheck = () => {
     if (!user?.id || isAvailable) return
+    // Prevent duplicate GPS requests
+    if (isWaitingForAccuracy || isGettingLocationRef.current) return
+
+    // Reset flags
+    locationPermissionDeniedRef.current = false
+    isGettingLocationRef.current = true
 
     setIsWaitingForAccuracy(true)
     setGpsAccuracy(null)
     setError("")
 
+    // Ensure browser environment
+    if (typeof window === "undefined" || !window.navigator) {
+      setError("Geolocation is not available in this environment")
+      setIsWaitingForAccuracy(false)
+      isGettingLocationRef.current = false
+      return
+    }
+
     if (!navigator.geolocation) {
       setError("Geolocation is not supported by your browser")
       setIsWaitingForAccuracy(false)
+      isGettingLocationRef.current = false
       return
     }
 
@@ -274,6 +291,9 @@ export default function AgentDashboardPage() {
         const accuracy = position.coords.accuracy
         const lat = position.coords.latitude
         const lng = position.coords.longitude
+
+        // Permission is granted if we got a position
+        locationPermissionDeniedRef.current = false
 
         setGpsAccuracy(accuracy)
         setAgentLocation({ lat, lng })
@@ -285,18 +305,37 @@ export default function AgentDashboardPage() {
           // Accuracy is good - mark agent online
           markAgentOnline({ lat, lng, accuracy })
           // Stop watching (will restart for background updates)
-          if (watchId !== null) {
+          if (typeof window !== "undefined" && navigator.geolocation && watchId !== null) {
             navigator.geolocation.clearWatch(watchId)
           }
           setIsWaitingForAccuracy(false)
+          isGettingLocationRef.current = false
         }
       },
       (error) => {
         console.error("GPS watch error:", error)
-        setError("Failed to get GPS location. Please enable location permissions.")
+
+        // Check for permission denial
+        const message = error?.message || ""
+        const isDenied =
+          error?.code === error.PERMISSION_DENIED ||
+          message.toLowerCase().includes("permission") ||
+          message.toLowerCase().includes("denied")
+
+        if (isDenied) {
+          locationPermissionDeniedRef.current = true
+          setError(
+            "Location permission denied. Please allow location in your browser's site settings, ensure HTTPS, and try again."
+          )
+        } else {
+          setError("Couldn't get a GPS fix. Move near a window/outside and try again.")
+        }
+
         setIsWaitingForAccuracy(false)
-        if (locationWatchIdRef.current !== null) {
+        isGettingLocationRef.current = false
+        if (typeof window !== "undefined" && navigator.geolocation && locationWatchIdRef.current !== null) {
           navigator.geolocation.clearWatch(locationWatchIdRef.current)
+          locationWatchIdRef.current = null
         }
       },
       {
@@ -311,11 +350,18 @@ export default function AgentDashboardPage() {
     // Timeout after 20 seconds if accuracy never reaches threshold
     setTimeout(() => {
       if (gpsAccuracy === null || (gpsAccuracy !== null && gpsAccuracy > ACCURACY_THRESHOLD)) {
-        if (watchId !== null) {
+        if (typeof window !== "undefined" && navigator.geolocation && watchId !== null) {
           navigator.geolocation.clearWatch(watchId)
         }
         setIsWaitingForAccuracy(false)
-        setError("We're having trouble getting a precise location. Please move closer to a window or outside.")
+        isGettingLocationRef.current = false
+        if (locationPermissionDeniedRef.current) {
+          setError(
+            "Location permission denied. Please allow location in your browser's site settings, ensure HTTPS, and try again."
+          )
+        } else {
+          setError("Still trying to get a precise GPS fix. Move closer to a window or outside, then try again.")
+        }
       }
     }, 20000)
   }

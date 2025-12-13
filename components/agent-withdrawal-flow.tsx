@@ -116,6 +116,8 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
   const [isWaitingForAccuracy, setIsWaitingForAccuracy] = useState(false)
   const locationWatchCleanup = useRef<(() => void) | null>(null)
   const hasSearchedAgents = useRef(false) // Prevent multiple searches
+  const isSearchingLocation = useRef(false) // Prevent multiple location searches
+  const locationPermissionDenied = useRef(false) // Track if permission was denied
   const mapInitialized = useRef(false) // Prevent map re-initialization
   const ACCURACY_THRESHOLD = 100 // Only search when accuracy ≤ 100m (for initial search)
   const MIN_WAIT_TIME = 6000 // Minimum 6 seconds wait time
@@ -128,6 +130,15 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
       setIsRefiningLocation(true)
       const startTime = Date.now()
       
+      // Check if geolocation is available
+      if (typeof window === "undefined" || !navigator.geolocation) {
+        locationPermissionDenied.current = true
+        setIsWaitingForAccuracy(false)
+        setIsRefiningLocation(false)
+        resolve(null)
+        return
+      }
+      
       // Import watchLocation
       import("@/lib/location-utils").then(({ watchLocation }) => {
         let bestLocation: { lat: number; lng: number; accuracy: number } | null = null
@@ -136,6 +147,9 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
         // Watch for location updates - wait for accuracy ≤ 100m
         locationWatchCleanup.current = watchLocation(
           (location) => {
+            // Location received - permission is granted
+            locationPermissionDenied.current = false
+            
             const accuracy = location.accuracy || Infinity
             
             // Update UI with current accuracy
@@ -174,6 +188,16 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
           },
           (error) => {
             console.error("Location watch error:", error)
+            
+            // Check if it's a permission denied error
+            if (error.message && (
+              error.message.includes("permission") || 
+              error.message.includes("denied") ||
+              error.message.includes("PERMISSION_DENIED")
+            )) {
+              locationPermissionDenied.current = true
+            }
+            
             setIsWaitingForAccuracy(false)
             setIsRefiningLocation(false)
             // Resolve with best location we have, or null
@@ -197,8 +221,20 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
               setIsRefiningLocation(false)
               resolve({ lat: bestLocation!.lat, lng: bestLocation!.lng })
             }, 1500)
+          } else if (!hasLocked && !bestLocation) {
+            // No location received at all - likely permission denied
+            locationPermissionDenied.current = true
+            setIsWaitingForAccuracy(false)
+            setIsRefiningLocation(false)
+            resolve(null)
           }
         }, 30000)
+      }).catch((error) => {
+        console.error("Failed to import watchLocation:", error)
+        locationPermissionDenied.current = true
+        setIsWaitingForAccuracy(false)
+        setIsRefiningLocation(false)
+        resolve(null)
       })
     })
   }
@@ -356,20 +392,34 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
 
   // Start map selection - wait for accurate GPS before searching
   const startMapSelection = async () => {
+    // Prevent multiple simultaneous searches
+    if (isSearchingLocation.current) {
+      console.log("⏸️ Location search already in progress, ignoring duplicate request")
+      return
+    }
+
+    isSearchingLocation.current = true
     setIsLoading(true)
     setError("")
     hasSearchedAgents.current = false // Reset search flag
     setClientLocationLocked(false)
+    locationPermissionDenied.current = false // Reset permission flag
 
     try {
       // Wait for accurate location (≤100m) - this will show loading screen
       const coords = await captureLocationWithAccuracyGate()
       
       if (!coords) {
-        setError("Please enable location access to find nearby agents")
+        // Only show permission error if permission was actually denied
+        if (locationPermissionDenied.current) {
+          setError("Please enable location access to find nearby agents. Check your browser settings.")
+        } else {
+          setError("Unable to get accurate location. Please try again or move to an area with better GPS signal.")
+        }
         setIsLoading(false)
         setIsRefiningLocation(false)
         setIsWaitingForAccuracy(false)
+        isSearchingLocation.current = false
         return
       }
 
@@ -379,11 +429,19 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
       // Move to map step - agent search will happen automatically via useEffect
       setStep("map")
     } catch (error) {
-      setError("Failed to get your location. Please enable location access.")
+      console.error("Location capture error:", error)
+      // Check if it's a permission error
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      if (errorMessage.includes("permission") || errorMessage.includes("denied")) {
+        setError("Please enable location access to find nearby agents. Check your browser settings.")
+      } else {
+        setError("Failed to get your location. Please try again.")
+      }
       setIsRefiningLocation(false)
       setIsWaitingForAccuracy(false)
     } finally {
       setIsLoading(false)
+      isSearchingLocation.current = false
     }
   }
 
@@ -836,6 +894,7 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
               onClick={startMapSelection}
               disabled={
                 isLoading ||
+                isSearchingLocation.current ||
                 !amount ||
                 Number.parseFloat(amount) < 10 ||
                 Number.parseFloat(amount) > user.balance
@@ -843,7 +902,7 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
               className="w-full text-base"
               size="lg"
             >
-              {isLoading ? (
+              {isLoading || isSearchingLocation.current ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : (
                 <MapPin className="h-4 w-4 mr-2" />

@@ -30,7 +30,6 @@ import {
   ArrowLeft,
   RefreshCw,
   X,
-  Clock,
 } from "lucide-react"
 import { CurrencyFormatter } from "@/components/currency-formatter"
 import { dispatchBalanceUpdate } from "@/lib/balance-updater"

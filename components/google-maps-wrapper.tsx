@@ -200,9 +200,35 @@ export function GoogleMapsWrapper({
     }
   }, [agentLocation])
 
-  // Fit map to bounds when locations change
+  // Smooth camera following for agent movement (like Bolt/Uber)
   useEffect(() => {
-    if (map && isMapReady) {
+    if (map && isMapReady && agentLocation && showRoute && selectedAgent) {
+      // Smoothly pan to agent location instead of jumping
+      const currentCenter = map.getCenter()
+      if (currentCenter) {
+        const currentLat = currentCenter.lat()
+        const currentLng = currentCenter.lng()
+        const targetLat = agentLocation.lat
+        const targetLng = agentLocation.lng
+        
+        // Only pan if there's a significant change (more than 0.0001 degrees ~11 meters)
+        const latDiff = Math.abs(currentLat - targetLat)
+        const lngDiff = Math.abs(currentLng - targetLng)
+        
+        if (latDiff > 0.0001 || lngDiff > 0.0001) {
+          // Smooth pan animation
+          map.panTo({
+            lat: targetLat,
+            lng: targetLng,
+          })
+        }
+      }
+    }
+  }, [map, isMapReady, agentLocation, showRoute, selectedAgent])
+
+  // Fit map to bounds when locations change (only when not tracking)
+  useEffect(() => {
+    if (map && isMapReady && !showRoute) {
       const bounds = calculateBounds()
       if (bounds) {
         map.fitBounds(bounds)
@@ -213,9 +239,9 @@ export function GoogleMapsWrapper({
         })
       }
     }
-  }, [map, isMapReady, userLocation, agents, agentLocation, showMeetingPoint, calculateBounds])
+  }, [map, isMapReady, userLocation, agents, showMeetingPoint, calculateBounds, showRoute])
 
-  // Calculate and display route
+  // Calculate and display route - updates smoothly when agent moves
   useEffect(() => {
     if (
       !showRoute ||
@@ -230,20 +256,25 @@ export function GoogleMapsWrapper({
 
     const agentLoc = agentLocation || selectedAgent.location
 
-    directionsService.route(
-      {
-        origin: new google.maps.LatLng(agentLoc.lat, agentLoc.lng),
-        destination: new google.maps.LatLng(userLocation.lat, userLocation.lng),
-        travelMode: google.maps.TravelMode.DRIVING,
-      },
-      (result, status) => {
-        if (status === google.maps.DirectionsStatus.OK && result) {
-          setDirections(result)
-        } else {
-          console.error("Directions request failed:", status)
+    // Debounce route updates to avoid too many API calls
+    const timeoutId = setTimeout(() => {
+      directionsService.route(
+        {
+          origin: new google.maps.LatLng(agentLoc.lat, agentLoc.lng),
+          destination: new google.maps.LatLng(userLocation.lat, userLocation.lng),
+          travelMode: google.maps.TravelMode.DRIVING,
+        },
+        (result, status) => {
+          if (status === google.maps.DirectionsStatus.OK && result) {
+            setDirections(result)
+          } else {
+            console.error("Directions request failed:", status)
+          }
         }
-      }
-    )
+      )
+    }, 500) // Small delay to batch updates
+
+    return () => clearTimeout(timeoutId)
   }, [
     showRoute,
     directionsService,
@@ -709,6 +740,9 @@ export function GoogleMapsWrapper({
 
           if (!icon) return null
 
+          // Use smooth animation for real-time tracking, drop animation for initial load
+          const isRealTimeTracking = agentLocation && selectedAgent?.id === agent.id
+
           return (
             <Marker
               key={agent.id}
@@ -719,12 +753,13 @@ export function GoogleMapsWrapper({
               icon={icon}
               title={`${agent.name} - ${agent.distanceFormatted} away`}
               animation={
-                agentLocation && selectedAgent?.id === agent.id
-                  ? undefined
-                  : google.maps.Animation.DROP
+                isRealTimeTracking
+                  ? undefined // No animation for real-time updates (smooth movement handled by position updates)
+                  : google.maps.Animation.DROP // Drop animation only on initial load
               }
               onClick={() => onSelectAgent(agent)}
               zIndex={selectedAgent?.id === agent.id ? 1001 : 500}
+              optimized={false} // Disable optimization for smoother real-time updates
             />
           )
         })}

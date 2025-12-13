@@ -30,6 +30,7 @@ import {
   ArrowLeft,
   RefreshCw,
   X,
+  Clock,
 } from "lucide-react"
 import { CurrencyFormatter } from "@/components/currency-formatter"
 import { dispatchBalanceUpdate } from "@/lib/balance-updater"
@@ -106,6 +107,9 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
   const [showReviewModal, setShowReviewModal] = useState(false)
   const [hasReviewed, setHasReviewed] = useState(false)
   const [showMeetingPoint, setShowMeetingPoint] = useState(false)
+  const [etaSeconds, setEtaSeconds] = useState<number | null>(null)
+  const [etaFormatted, setEtaFormatted] = useState<string | null>(null)
+  const [routeDistance, setRouteDistance] = useState<number | null>(null)
 
   // Get user's current location
   const captureLocation = async () => {
@@ -248,7 +252,7 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
     }
   }
 
-  // Track agent location and distance
+  // Track agent location, distance, and ETA
   const trackAgent = useCallback(async () => {
     if (!request?._id || !userCoordinates) return
 
@@ -262,6 +266,17 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
         // Update distance
         if (data.distance !== null) {
           setAgentDistance(data.distance)
+        }
+        
+        // Update ETA
+        if (data.etaSeconds !== null && data.etaSeconds !== undefined) {
+          setEtaSeconds(data.etaSeconds)
+        }
+        if (data.etaFormatted) {
+          setEtaFormatted(data.etaFormatted)
+        }
+        if (data.routeDistance !== null && data.routeDistance !== undefined) {
+          setRouteDistance(data.routeDistance)
         }
         
         // Update agent's real-time location
@@ -356,12 +371,16 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
     return () => clearInterval(interval)
   }, [request?._id, step, pollStatus])
 
-  // Track agent location every 5 seconds when matched or in progress
+  // Track agent location every 2-3 seconds when matched or in progress for smooth real-time updates
   useEffect(() => {
     if (!request?._id || !userCoordinates) return
     if (step !== "matched" && step !== "in_progress") return
 
-    const interval = setInterval(trackAgent, 5000)
+    // Initial track
+    trackAgent()
+    
+    // Then track every 2.5 seconds for smooth updates (like Bolt/Uber)
+    const interval = setInterval(trackAgent, 2500)
     return () => clearInterval(interval)
   }, [request?._id, step, userCoordinates, trackAgent])
 
@@ -1115,6 +1134,29 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
                       ? "Track the agent as they head to your location"
                       : "Real-time view of agent location and route"}
                   </CardDescription>
+                  {/* Live ETA and Distance Display */}
+                  {(step === "matched" || step === "in_progress") && (etaFormatted || agentDistance !== null) && (
+                    <div className="mt-2 flex flex-wrap items-center gap-3 text-xs sm:text-sm">
+                      {etaFormatted && (
+                        <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 dark:bg-blue-950 rounded-md border border-blue-200 dark:border-blue-800">
+                          <Clock className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                          <span className="font-semibold text-blue-700 dark:text-blue-300">ETA:</span>
+                          <span className="text-blue-600 dark:text-blue-400">{etaFormatted}</span>
+                        </div>
+                      )}
+                      {agentDistance !== null && (
+                        <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-green-50 dark:bg-green-950 rounded-md border border-green-200 dark:border-green-800">
+                          <Navigation className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
+                          <span className="font-semibold text-green-700 dark:text-green-300">Distance:</span>
+                          <span className="text-green-600 dark:text-green-400">
+                            {agentDistance < 1 
+                              ? `${Math.round(agentDistance * 1000)}m` 
+                              : `${agentDistance.toFixed(1)}km`}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </CardHeader>
                 <CardContent className="p-0">
                   <div style={{ height: "400px", width: "100%" }} className="sm:h-[450px]">

@@ -75,6 +75,28 @@ export function UberAgentTrackingMap({
     libraries,
   })
 
+  // Log detailed error information
+  useEffect(() => {
+    if (loadError) {
+      console.error("=".repeat(80))
+      console.error("🚨 GOOGLE MAPS ERROR DETECTED (Tracking Map)")
+      console.error("=".repeat(80))
+      console.error("Full error object:", JSON.stringify(loadError, null, 2))
+      console.error("Error message:", loadError.message)
+      console.error("Error name:", loadError.name)
+      console.error("Current domain:", typeof window !== "undefined" ? window.location.origin : "N/A")
+      console.error("API Key exists:", !!apiKey)
+      console.error("=".repeat(80))
+      
+      // Check for specific error types
+      const errorMsg = (loadError.message || "").toLowerCase()
+      if (errorMsg.includes("referer") || errorMsg.includes("referrer")) {
+        console.error("❌ FIX: Add this to Google Cloud Console → API Key → HTTP referrers:")
+        console.error(`   ${typeof window !== "undefined" ? window.location.origin : ""}/*`)
+      }
+    }
+  }, [loadError, apiKey])
+
   // Get user's location with high accuracy
   useEffect(() => {
     let watchCleanup: (() => void) | null = null
@@ -377,55 +399,109 @@ export function UberAgentTrackingMap({
   if (loadError) {
     const isProduction = typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1"
     const currentDomain = typeof window !== "undefined" ? window.location.origin : ""
+    const hostname = typeof window !== "undefined" ? window.location.hostname : ""
+    const protocol = typeof window !== "undefined" ? window.location.protocol : ""
+    
+    // Extract error type from message
+    const errorMsg = (loadError.message || "").toLowerCase()
+    const isReferrerError = errorMsg.includes("referer") || errorMsg.includes("referrer")
+    const isInvalidKeyError = errorMsg.includes("invalid") && errorMsg.includes("key")
+    const isBillingError = errorMsg.includes("billing")
+    const isApiNotEnabledError = errorMsg.includes("api") && (errorMsg.includes("not enabled") || errorMsg.includes("not activated"))
     
     return (
       <Card>
-        <CardContent className="py-12">
-          <div className="text-center space-y-4">
-            <div className="text-red-500">
-              <p className="font-semibold text-lg">Oops! Something went wrong.</p>
-              <p className="text-sm text-muted-foreground mt-2">
-                This page didn't load Google Maps correctly. See the JavaScript console for technical details.
-              </p>
-            </div>
-            <div className="text-left bg-muted p-4 rounded-lg text-sm space-y-2 max-w-md mx-auto">
-              <p className="font-semibold">Troubleshooting Steps:</p>
-              <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
-                <li>Verify API key is set in environment variables (`.env.local` for dev, hosting platform env vars for production)</li>
-                {isProduction && (
-                  <li className="font-semibold text-orange-600">
-                    For production/mobile: Add your domain to API key restrictions:
-                    <ul className="list-disc list-inside ml-4 mt-1 font-normal">
-                      <li>Go to Google Cloud Console → APIs & Services → Credentials</li>
-                      <li>Click your API key → Application restrictions</li>
-                      <li>Add: <code className="bg-background px-1 rounded">{currentDomain}/*</code></li>
-                      <li>Also add: <code className="bg-background px-1 rounded">*.{currentDomain.replace(/^https?:\/\//, "")}/*</code></li>
-                    </ul>
-                  </li>
-                )}
-                <li>Enable these 4 APIs in Google Cloud Console:
-                  <ul className="list-disc list-inside ml-4 mt-1">
-                    <li>Maps JavaScript API</li>
-                    <li>Geocoding API</li>
-                    <li>Directions API</li>
-                    <li>Distance Matrix API</li>
-                  </ul>
-                </li>
-                <li>Enable billing in Google Cloud (required even for free tier)</li>
-                {!isProduction && (
-                  <li>If API key is restricted, add `http://localhost:3000/*` to allowed referrers</li>
-                )}
-                <li className="font-semibold text-blue-600">
-                  For mobile browsers: Ensure your production site uses HTTPS (required by Google Maps)
-                </li>
-              </ol>
+        <CardContent className="py-6 px-4">
+          <div className="space-y-4">
+            <div className="text-center">
+              <div className="text-red-500 mb-2">
+                <p className="font-semibold text-lg">⚠️ Google Maps Error</p>
+              </div>
               {loadError.message && (
-                <div className="mt-3 p-2 bg-red-50 dark:bg-red-950 rounded text-xs">
-                  <p className="font-semibold">Error Details:</p>
-                  <p className="text-red-700 dark:text-red-300">{loadError.message}</p>
+                <div className="mt-3 p-3 bg-red-50 dark:bg-red-950 rounded-lg border border-red-200 dark:border-red-800">
+                  <p className="font-semibold text-red-800 dark:text-red-200 text-sm mb-2">Error Message:</p>
+                  <p className="text-red-700 dark:text-red-300 font-mono text-xs break-all">{loadError.message}</p>
                 </div>
               )}
             </div>
+
+            {/* Diagnostic Info */}
+            <div className="bg-blue-50 dark:bg-blue-950 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
+              <p className="font-semibold text-blue-800 dark:text-blue-200 text-sm mb-2">📋 Diagnostic Info:</p>
+              <div className="text-xs text-blue-700 dark:text-blue-300 space-y-1">
+                <p>• Domain: <code className="bg-white dark:bg-gray-900 px-1 rounded">{currentDomain}</code></p>
+                <p>• Hostname: <code className="bg-white dark:bg-gray-900 px-1 rounded">{hostname}</code></p>
+                <p>• Protocol: <code className="bg-white dark:bg-gray-900 px-1 rounded">{protocol}</code></p>
+                <p>• API Key Present: <code className="bg-white dark:bg-gray-900 px-1 rounded">{apiKey ? "Yes" : "No"}</code></p>
+              </div>
+            </div>
+
+            {/* Specific Fix Based on Error Type */}
+            {isReferrerError && (
+              <div className="bg-yellow-50 dark:bg-yellow-950 p-4 rounded-lg border-2 border-yellow-400 dark:border-yellow-600">
+                <p className="font-bold text-yellow-900 dark:text-yellow-100 text-sm mb-3">🔧 FIX: Add Domain to API Key Restrictions</p>
+                <p className="text-yellow-800 dark:text-yellow-200 text-xs mb-3">
+                  Your domain is not allowed in the API key restrictions. Add these to Google Cloud Console:
+                </p>
+                <div className="bg-white dark:bg-gray-900 p-2 rounded space-y-1 mb-3">
+                  <code className="block text-xs break-all">{currentDomain}/*</code>
+                  {hostname && (
+                    <code className="block text-xs break-all">{protocol}//*.{hostname}/*</code>
+                  )}
+                </div>
+                <div className="text-yellow-800 dark:text-yellow-200 text-xs space-y-1">
+                  <p className="font-semibold">Steps:</p>
+                  <ol className="list-decimal list-inside ml-2 space-y-1">
+                    <li>Go to <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="underline">Google Cloud Console → Credentials</a></li>
+                    <li>Click your API key</li>
+                    <li>Under "Application restrictions" → Select "HTTP referrers"</li>
+                    <li>Add the domains shown above</li>
+                    <li>Click "SAVE"</li>
+                  </ol>
+                </div>
+              </div>
+            )}
+
+            {isInvalidKeyError && (
+              <div className="bg-red-50 dark:bg-red-950 p-4 rounded-lg border-2 border-red-400">
+                <p className="font-bold text-red-900 dark:text-red-100 text-sm mb-2">🔧 FIX: Invalid API Key</p>
+                <p className="text-red-800 dark:text-red-200 text-xs">
+                  Check that your API key is correct in your hosting platform's environment variables.
+                </p>
+              </div>
+            )}
+
+            {isBillingError && (
+              <div className="bg-orange-50 dark:bg-orange-950 p-4 rounded-lg border-2 border-orange-400">
+                <p className="font-bold text-orange-900 dark:text-orange-100 text-sm mb-2">🔧 FIX: Enable Billing</p>
+                <p className="text-orange-800 dark:text-orange-200 text-xs">
+                  Go to Google Cloud Console → Billing and enable billing (required even for free tier).
+                </p>
+              </div>
+            )}
+
+            {isApiNotEnabledError && (
+              <div className="bg-purple-50 dark:bg-purple-950 p-4 rounded-lg border-2 border-purple-400">
+                <p className="font-bold text-purple-900 dark:text-purple-100 text-sm mb-2">🔧 FIX: Enable Maps JavaScript API</p>
+                <p className="text-purple-800 dark:text-purple-200 text-xs">
+                  Go to Google Cloud Console → APIs & Services → Library and enable "Maps JavaScript API".
+                </p>
+              </div>
+            )}
+
+            {/* General Troubleshooting */}
+            {!isReferrerError && !isInvalidKeyError && !isBillingError && !isApiNotEnabledError && (
+              <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg border border-gray-300 dark:border-gray-700">
+                <p className="font-semibold text-sm mb-2">General Troubleshooting:</p>
+                <ol className="list-decimal list-inside text-xs text-gray-700 dark:text-gray-300 space-y-1 ml-2">
+                  <li>Verify API key is set in hosting platform environment variables</li>
+                  <li>Add your domain to API key restrictions: <code className="bg-white dark:bg-gray-800 px-1 rounded">{currentDomain}/*</code></li>
+                  <li>Enable Maps JavaScript API in Google Cloud Console</li>
+                  <li>Enable billing in Google Cloud Console</li>
+                  <li>Redeploy your application after making changes</li>
+                </ol>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

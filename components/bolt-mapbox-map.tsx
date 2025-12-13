@@ -771,6 +771,20 @@ export function BoltMapboxMap({
         setMapError("Failed to load map. Please check your connection.")
       })
 
+      // Timeout fallback - if map doesn't load in 15 seconds, show error
+      const loadTimeout = setTimeout(() => {
+        if (!map.current?.loaded()) {
+          console.error("Map load timeout")
+          setMapError("Map is taking too long to load. Please refresh the page.")
+          setMapLoaded(true) // Allow UI to show error state
+        }
+      }, 15000)
+
+      // Clear timeout when map loads
+      map.current.once("load", () => {
+        clearTimeout(loadTimeout)
+      })
+
     } catch (error) {
       console.error("Map initialization error:", error)
       setMapError("Failed to initialize map.")
@@ -1132,22 +1146,8 @@ export function BoltMapboxMap({
     )
   }
 
-  // Loading state
-  if (!mapLoaded) {
-    return (
-      <Card className="overflow-hidden">
-        <CardContent className="py-12">
-          <div className="flex flex-col items-center justify-center">
-            <div className="relative">
-              <Loader2 className="h-12 w-12 animate-spin text-primary" />
-              <div className="absolute inset-0 h-12 w-12 rounded-full border-4 border-primary/20 animate-ping" />
-            </div>
-            <p className="text-muted-foreground mt-4 font-medium">Loading premium map...</p>
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
+  // Loading state - show map container with overlay so map can initialize in background
+  // This is less blocking than returning early
 
   return (
     <div className={`relative w-full ${className}`}>
@@ -1157,6 +1157,21 @@ export function BoltMapboxMap({
         className="w-full rounded-2xl overflow-hidden shadow-2xl border-2 border-border/50"
         style={{ height }}
       />
+
+      {/* Loading Overlay */}
+      {!mapLoaded && !mapError && (
+        <div 
+          className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 backdrop-blur-sm rounded-2xl z-50"
+          style={{ height }}
+        >
+          <div className="relative">
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            <div className="absolute inset-0 h-12 w-12 rounded-full border-4 border-primary/20 animate-ping" />
+          </div>
+          <p className="text-muted-foreground mt-4 font-medium">Loading map...</p>
+          <p className="text-xs text-muted-foreground mt-1">Please wait, this may take a moment</p>
+        </div>
+      )}
 
       {/* Floating Controls - Top Right */}
       <div className="absolute top-4 right-4 flex flex-col gap-2" style={{ marginTop: "80px" }}>

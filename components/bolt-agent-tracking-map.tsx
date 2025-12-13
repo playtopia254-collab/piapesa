@@ -244,12 +244,17 @@ export function BoltAgentTrackingMap({
   const [mapLoaded, setMapLoaded] = useState(false)
   const [mapError, setMapError] = useState<string | null>(null)
 
+  // Default to Nairobi so map loads immediately
+  const DEFAULT_LOCATION = { lat: -1.2921, lng: 36.8219 }
+  
   const [userLocation, setUserLocation] = useState<{
     lat: number
     lng: number
-  } | null>(null)
+  } | null>(DEFAULT_LOCATION) // Start with default location
+  const [hasRealLocation, setHasRealLocation] = useState(false)
   const [agents, setAgents] = useState<Agent[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(false) // Start false since we have default location
+  const [isGettingLocation, setIsGettingLocation] = useState(true) // Separate state for location
   const [error, setError] = useState("")
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
   const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null)
@@ -259,16 +264,39 @@ export function BoltAgentTrackingMap({
 
   const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || ""
 
-  // Get user's location
+  // Get user's location (non-blocking - map loads with default first)
   useEffect(() => {
     let watchCleanup: (() => void) | null = null
+    let timeoutId: NodeJS.Timeout | null = null
 
     const initializeLocation = async () => {
       try {
-        setIsLoading(true)
-        const location = await getCurrentLocation()
+        setIsGettingLocation(true)
+        
+        // Set a 10-second timeout for location
+        const locationPromise = getCurrentLocation()
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(() => {
+            reject(new Error("Location timeout - using default"))
+          }, 10000) // 10 second timeout
+        })
+        
+        const location = await Promise.race([locationPromise, timeoutPromise])
+        
+        if (timeoutId) clearTimeout(timeoutId)
+        
         setUserLocation({ lat: location.lat, lng: location.lng })
         setLocationAccuracy(location.accuracy || null)
+        setHasRealLocation(true)
+
+        // Fly to user location if map is loaded
+        if (map.current) {
+          map.current.flyTo({
+            center: [location.lng, location.lat],
+            zoom: CAMERA_CONFIG.defaultZoom,
+            duration: 1500,
+          })
+        }
 
         watchCleanup = watchLocation(
           (location) => {
@@ -281,11 +309,13 @@ export function BoltAgentTrackingMap({
         )
       } catch (error) {
         console.error("Failed to get location:", error)
+        // Keep default location, show warning
         setError(
-          "Failed to get your location. Please enable location permissions."
+          "Using default location. Enable location for better results."
         )
       } finally {
-        setIsLoading(false)
+        setIsGettingLocation(false)
+        if (timeoutId) clearTimeout(timeoutId)
       }
     }
 
@@ -294,6 +324,9 @@ export function BoltAgentTrackingMap({
     return () => {
       if (watchCleanup) {
         watchCleanup()
+      }
+      if (timeoutId) {
+        clearTimeout(timeoutId)
       }
     }
   }, [])
@@ -554,52 +587,52 @@ export function BoltAgentTrackingMap({
     )
   }
 
-  // Loading state
-  if (isLoading) {
+  // Loading state - only show if map token is missing (map loads with default location now)
+  if (!mapboxToken) {
     return (
       <Card>
         <CardContent className="py-12">
           <div className="flex flex-col items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-            <p className="text-muted-foreground">Getting your location...</p>
+            <p className="text-muted-foreground">Initializing map...</p>
           </div>
         </CardContent>
       </Card>
     )
   }
 
-  // Location error
-  if (error) {
-    return (
-      <Card>
-        <CardContent className="py-12">
-          <div className="text-center text-red-500">
-            <AlertCircle className="h-12 w-12 mx-auto mb-4" />
-            <p className="font-semibold text-lg">{error}</p>
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  // No location
-  if (!userLocation) {
-    return (
-      <Card>
-        <CardContent className="py-12">
-          <div className="text-center text-muted-foreground">
-            <MapPin className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Location not available</p>
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }
+  // Note: We no longer block on location errors - map loads with default location
 
   return (
     <div className="w-full space-y-4">
+      {/* Location Status */}
+      {isGettingLocation && (
+        <Card className="border-blue-500 bg-blue-50 dark:bg-blue-950/30 mb-4">
+          <CardContent className="py-3">
+            <div className="flex items-center gap-3">
+              <Loader2 className="h-4 w-4 text-blue-600 dark:text-blue-400 animate-spin" />
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                Getting your precise location...
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
+      {/* Location Error Warning */}
+      {error && !isGettingLocation && (
+        <Card className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950/30 mb-4">
+          <CardContent className="py-3">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+              <p className="text-sm text-yellow-800 dark:text-yellow-200">{error}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
       {/* Location Accuracy Warning */}
-      {locationAccuracy && locationAccuracy > 100 && (
+      {!isGettingLocation && hasRealLocation && locationAccuracy && locationAccuracy > 100 && (
         <Card className="border-yellow-500 bg-yellow-50 dark:bg-yellow-950/30 mb-4">
           <CardContent className="pt-6">
             <div className="flex items-start gap-3">

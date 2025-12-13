@@ -120,6 +120,10 @@ export async function GET(
       }
     }
 
+    // Get agent's location accuracy if available
+    const agentAccuracy = agentLocation?.accuracy || agent.lastKnownLocation?.accuracy || null
+    const agentLocationUpdatedAt = agentLocation?.updatedAt || agent.lastKnownLocation?.updatedAt || null
+    
     return NextResponse.json({
       success: true,
       agent: {
@@ -127,10 +131,14 @@ export async function GET(
         name: agent.name,
         phone: agent.phone,
         location: agentLocation,
+        accuracy: agentAccuracy, // Agent's GPS accuracy in meters
+        locationUpdatedAt: agentLocationUpdatedAt, // When agent location was last updated
       },
       distance,
       distanceFormatted,
-      routeDistance, // Route distance in meters
+      routeDistance, // Route distance in meters (driving route)
+      straightLineDistance: distance, // Straight-line distance in km
+      straightLineDistanceMeters: distance ? Math.round(distance * 1000) : null, // Straight-line in meters
       etaSeconds, // ETA in seconds
       etaFormatted, // Formatted ETA string
       routeDuration, // Route duration in seconds

@@ -191,7 +191,7 @@ export default function AgentDashboardPage() {
   // Background location updates are handled by watchPosition in startBackgroundLocationUpdates
   // No need for interval-based updates when using watchPosition
 
-  // Update agent location (called from background GPS watcher)
+  // Update agent location with accuracy (called from background GPS watcher)
   const updateAgentLocation = useCallback(async () => {
     if (!user?.id || !agentLocation) return
 
@@ -203,6 +203,7 @@ export default function AgentDashboardPage() {
           agentId: user.id,
           lat: agentLocation.lat,
           lng: agentLocation.lng,
+          accuracy: gpsAccuracy, // Include accuracy for precise tracking
         }),
       })
 

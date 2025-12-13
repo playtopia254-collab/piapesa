@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 import { getDb } from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
 
-// POST - Update agent's current location
+// POST - Update agent's current location with accuracy
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { agentId, lat, lng } = body
+    const { agentId, lat, lng, accuracy } = body
 
     if (!agentId || lat === undefined || lng === undefined) {
       return NextResponse.json(
@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
 
     const latNum = Number.parseFloat(lat)
     const lngNum = Number.parseFloat(lng)
+    const accuracyNum = accuracy !== undefined ? Number.parseFloat(accuracy) : null
 
     if (isNaN(latNum) || isNaN(lngNum)) {
       return NextResponse.json({ error: "Invalid coordinates" }, { status: 400 })
@@ -40,35 +41,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 })
     }
 
+    // Build location data with accuracy
+    const locationData = {
+      lat: latNum,
+      lng: lngNum,
+      accuracy: accuracyNum,
+      updatedAt: new Date(),
+    }
+
     // Update agent location (both location and lastKnownLocation for real-time tracking)
     await usersCollection.updateOne(
       { _id: new ObjectId(agentId) },
       {
         $set: {
-          location: {
-            lat: latNum,
-            lng: lngNum,
-            updatedAt: new Date(),
-          },
-          lastKnownLocation: {
-            lat: latNum,
-            lng: lngNum,
-            updatedAt: new Date(),
-          },
+          location: locationData,
+          lastKnownLocation: locationData,
           lastActiveAt: new Date(),
         },
       }
     )
 
-    console.log(`📍 Agent ${agentId} location updated: ${latNum}, ${lngNum}`)
+    const accuracyStr = accuracyNum !== null ? ` (±${Math.round(accuracyNum)}m)` : ''
+    console.log(`📍 Agent ${agentId} location updated: ${latNum}, ${lngNum}${accuracyStr}`)
 
     return NextResponse.json({
       success: true,
       message: "Location updated successfully",
-      location: {
-        lat: latNum,
-        lng: lngNum,
-      },
+      location: locationData,
     })
   } catch (error) {
     console.error("Update agent location error:", error)

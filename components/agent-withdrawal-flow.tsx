@@ -119,7 +119,10 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
   const [isRefiningLocation, setIsRefiningLocation] = useState(false)
   const [clientLocationLocked, setClientLocationLocked] = useState(false)
   const [isWaitingForAccuracy, setIsWaitingForAccuracy] = useState(false)
+  const [agentAccuracy, setAgentAccuracy] = useState<number | null>(null) // Agent's GPS accuracy
+  const [straightLineDistanceMeters, setStraightLineDistanceMeters] = useState<number | null>(null) // Precise distance in meters
   const locationWatchCleanup = useRef<(() => void) | null>(null)
+  const trackingLocationWatchId = useRef<number | null>(null) // Continuous location tracking during matched/in_progress
   const hasSearchedAgents = useRef(false) // Prevent multiple searches
   const isSearchingLocation = useRef(false) // Prevent multiple location searches
   const locationPermissionDenied = useRef(false) // Track if permission was denied
@@ -598,9 +601,19 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
       const data = await response.json()
 
       if (data.success) {
-        // Update distance
+        // Update distance (use straight line distance in meters for accuracy)
         if (data.distance !== null) {
           setAgentDistance(data.distance)
+        }
+        
+        // Update straight-line distance in meters for precise tracking
+        if (data.straightLineDistanceMeters !== null && data.straightLineDistanceMeters !== undefined) {
+          setStraightLineDistanceMeters(data.straightLineDistanceMeters)
+        }
+        
+        // Update agent accuracy
+        if (data.agent?.accuracy !== null && data.agent?.accuracy !== undefined) {
+          setAgentAccuracy(data.agent.accuracy)
         }
         
         // Update ETA
@@ -726,6 +739,53 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
     const interval = setInterval(trackAgent, 2500)
     return () => clearInterval(interval)
   }, [request?._id, step, userCoordinates, trackAgent])
+
+  // Continuously watch client's location during matched/in_progress for <100m accuracy
+  useEffect(() => {
+    if (step !== "matched" && step !== "in_progress") {
+      // Clear watch when not in tracking mode
+      if (trackingLocationWatchId.current !== null && typeof navigator !== "undefined" && navigator.geolocation) {
+        navigator.geolocation.clearWatch(trackingLocationWatchId.current)
+        trackingLocationWatchId.current = null
+      }
+      return
+    }
+
+    if (typeof navigator === "undefined" || !navigator.geolocation) return
+
+    // Start watching client's location for precise tracking
+    trackingLocationWatchId.current = navigator.geolocation.watchPosition(
+      (position) => {
+        const { latitude, longitude, accuracy } = position.coords
+        
+        // Update client location and accuracy
+        setUserCoordinates({ lat: latitude, lng: longitude })
+        setLocationAccuracy(accuracy)
+        
+        // Log accuracy for debugging
+        if (accuracy <= 100) {
+          console.log(`📍 Client location: ±${Math.round(accuracy)}m (excellent)`)
+        } else {
+          console.log(`📍 Client location: ±${Math.round(accuracy)}m (refining...)`)
+        }
+      },
+      (error) => {
+        console.error("Location watch error:", error)
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 3000, // Accept positions up to 3 seconds old
+        timeout: 10000,
+      }
+    )
+
+    return () => {
+      if (trackingLocationWatchId.current !== null && typeof navigator !== "undefined" && navigator.geolocation) {
+        navigator.geolocation.clearWatch(trackingLocationWatchId.current)
+        trackingLocationWatchId.current = null
+      }
+    }
+  }, [step])
 
   // Search time counter
   useEffect(() => {
@@ -1636,27 +1696,68 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
                       ? "Track the agent as they head to your location"
                       : "Real-time view of agent location and route"}
                   </CardDescription>
-                  {/* Live ETA and Distance Display */}
-                  {(step === "matched" || step === "in_progress") && (etaFormatted || agentDistance !== null) && (
-                    <div className="mt-2 flex flex-wrap items-center gap-3 text-xs sm:text-sm">
-                      {etaFormatted && (
-                        <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 dark:bg-blue-950 rounded-md border border-blue-200 dark:border-blue-800">
-                          <Clock className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-                          <span className="font-semibold text-blue-700 dark:text-blue-300">ETA:</span>
-                          <span className="text-blue-600 dark:text-blue-400">{etaFormatted}</span>
+                  {/* Live ETA, Distance, and Accuracy Display */}
+                  {(step === "matched" || step === "in_progress") && (
+                    <div className="mt-3 space-y-2">
+                      {/* Main stats row */}
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm">
+                        {etaFormatted && (
+                          <div className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950 rounded-lg border border-blue-200 dark:border-blue-800 shadow-sm">
+                            <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                            <span className="font-bold text-blue-700 dark:text-blue-300 text-sm sm:text-base">{etaFormatted}</span>
+                          </div>
+                        )}
+                        {straightLineDistanceMeters !== null && (
+                          <div className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 rounded-lg border border-green-200 dark:border-green-800 shadow-sm">
+                            <Navigation className="h-4 w-4 text-green-600 dark:text-green-400" />
+                            <span className="font-bold text-green-700 dark:text-green-300 text-sm sm:text-base">
+                              {straightLineDistanceMeters < 1000 
+                                ? `${straightLineDistanceMeters}m` 
+                                : `${(straightLineDistanceMeters / 1000).toFixed(1)}km`}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Accuracy indicators */}
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        {/* Client accuracy */}
+                        <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full ${
+                          locationAccuracy !== null && locationAccuracy <= 100 
+                            ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' 
+                            : 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300'
+                        }`}>
+                          <div className={`w-2 h-2 rounded-full ${
+                            locationAccuracy !== null && locationAccuracy <= 100 
+                              ? 'bg-green-500 animate-pulse' 
+                              : 'bg-yellow-500'
+                          }`} />
+                          <span className="font-medium">You: ±{locationAccuracy ? Math.round(locationAccuracy) : '...'}m</span>
                         </div>
-                      )}
-                      {agentDistance !== null && (
-                        <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-green-50 dark:bg-green-950 rounded-md border border-green-200 dark:border-green-800">
-                          <Navigation className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
-                          <span className="font-semibold text-green-700 dark:text-green-300">Distance:</span>
-                          <span className="text-green-600 dark:text-green-400">
-                            {agentDistance < 1 
-                              ? `${Math.round(agentDistance * 1000)}m` 
-                              : `${agentDistance.toFixed(1)}km`}
-                          </span>
+                        
+                        {/* Agent accuracy */}
+                        <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full ${
+                          agentAccuracy !== null && agentAccuracy <= 100 
+                            ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' 
+                            : 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300'
+                        }`}>
+                          <div className={`w-2 h-2 rounded-full ${
+                            agentAccuracy !== null && agentAccuracy <= 100 
+                              ? 'bg-green-500 animate-pulse' 
+                              : 'bg-yellow-500'
+                          }`} />
+                          <span className="font-medium">Agent: ±{agentAccuracy ? Math.round(agentAccuracy) : '...'}m</span>
                         </div>
-                      )}
+                        
+                        {/* Both accurate indicator */}
+                        {locationAccuracy !== null && locationAccuracy <= 100 && 
+                         agentAccuracy !== null && agentAccuracy <= 100 && (
+                          <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300">
+                            <Shield className="h-3 w-3" />
+                            <span className="font-medium">Precise</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </CardHeader>

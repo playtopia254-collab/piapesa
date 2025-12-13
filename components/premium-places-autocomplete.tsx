@@ -39,7 +39,7 @@ interface PremiumPlacesAutocompleteProps {
   showRecentSearches?: boolean
 }
 
-const libraries: ("places" | "geometry")[] = ["places", "geometry"]
+const libraries: ("places" | "geometry" | "drawing" | "visualization")[] = ["places", "geometry", "drawing"]
 
 // Recent searches storage key
 const RECENT_SEARCHES_KEY = "piapesa_recent_places"
@@ -69,7 +69,7 @@ export function PremiumPlacesAutocomplete({
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""
 
   const { isLoaded } = useJsApiLoader({
-    id: "google-map-premium-places",
+    id: "google-map-script",
     googleMapsApiKey: apiKey,
     libraries,
   })

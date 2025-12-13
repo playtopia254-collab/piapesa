@@ -71,13 +71,8 @@ interface PremiumAgentMapProps {
   requestStatus?: string
 }
 
-// Premium map libraries
-const libraries: ("places" | "geometry" | "drawing" | "visualization")[] = [
-  "places", 
-  "geometry", 
-  "drawing",
-  "visualization"
-]
+// Premium map libraries - must match all other components using useJsApiLoader
+const libraries: ("places" | "geometry" | "drawing" | "visualization")[] = ["places", "geometry", "drawing"]
 
 // Premium dark mode map style (Netflix-inspired)
 const premiumDarkStyle: google.maps.MapTypeStyle[] = [
@@ -174,7 +169,7 @@ export function PremiumAgentMap({
   }, [])
 
   const { isLoaded, loadError } = useJsApiLoader({
-    id: "google-map-premium",
+    id: "google-map-script",
     googleMapsApiKey: apiKey,
     libraries,
   })

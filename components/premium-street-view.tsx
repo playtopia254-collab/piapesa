@@ -34,7 +34,7 @@ interface PremiumStreetViewProps {
   onLocationVerified?: () => void
 }
 
-const libraries: ("places" | "geometry")[] = ["places", "geometry"]
+const libraries: ("places" | "geometry" | "drawing" | "visualization")[] = ["places", "geometry", "drawing"]
 
 export function PremiumStreetView({
   location,
@@ -59,7 +59,7 @@ export function PremiumStreetView({
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""
 
   const { isLoaded } = useJsApiLoader({
-    id: "google-map-premium-streetview",
+    id: "google-map-script",
     googleMapsApiKey: apiKey,
     libraries,
   })

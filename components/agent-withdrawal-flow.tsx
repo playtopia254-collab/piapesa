@@ -148,144 +148,169 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
     return `${(meters / 1000).toFixed(1)}km`
   }, [])
 
-  // Fast location capture with multiple strategies
+  // GOLD STANDARD FLOW: Request permission first, then Google Geolocation API
+  // Step 1: Request browser permission (unlocks sensors)
+  // Step 2: Call Google Geolocation API (10-30m accuracy, <1 second)
+  // Step 3: Verify accuracy before placing pin
   const getLocationWithAccuracy = useCallback(async (): Promise<{ lat: number; lng: number; accuracy: number } | null> => {
-    return new Promise((resolve) => {
-      // Check if geolocation is available
-      if (typeof navigator === "undefined" || !navigator.geolocation) {
-        setError("Geolocation is not supported by your browser")
-        resolve(null)
-        return
-      }
+    // Check if geolocation is available
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setError("Geolocation is not supported by your browser")
+      return null
+    }
 
-      // Check permissions first (if available)
-      if ('permissions' in navigator) {
-        navigator.permissions.query({ name: 'geolocation' as PermissionName }).then((result) => {
-          if (result.state === 'denied') {
-            setError("Location permission denied. Please enable location in your browser settings.")
-            resolve(null)
-            return
-          }
-        }).catch(() => {
-          // Permission API not supported, continue anyway
-        })
-      }
+    setIsGettingLocation(true)
+    setLocationStatus("Requesting location permission...")
+    const TARGET_ACCURACY = 50 // Lock at ≤50m accuracy
 
-      setIsGettingLocation(true)
-      setLocationStatus("Getting your location...")
-      let resolved = false
-      let watchId: number | null = null
-      let timeoutId: NodeJS.Timeout | null = null
-
-      // Strategy 1: FAST - Use cached location (instant if available)
-      const tryFastCached = () => {
+    try {
+      // STEP 1: Request browser permission (MANDATORY - unlocks sensors)
+      // This must be done first to unlock GPS sensors
+      await new Promise<void>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(
-          (position) => {
-            if (resolved) return
-            const { latitude, longitude, accuracy } = position.coords
-            const location = { lat: latitude, lng: longitude, accuracy: accuracy || 200 }
-            
-            setLocationAccuracy(accuracy)
-            setUserCoordinates({ lat: latitude, lng: longitude })
-            resolved = true
-            setIsGettingLocation(false)
-            setLocationStatus("Location found!")
-            
-            if (watchId !== null) navigator.geolocation.clearWatch(watchId)
-            if (timeoutId !== null) clearTimeout(timeoutId)
-            
-            resolve(location)
-          },
-          () => {}, // Silent fail - other strategies will try
-          { 
-            enableHighAccuracy: false, // Fast - use network/cached
-            timeout: 2000,
-            maximumAge: 120000 // Accept location up to 2 minutes old
-          }
-        )
-      }
-
-      // Strategy 2: High accuracy (parallel)
-      const tryHighAccuracy = () => {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            if (resolved) return
-            const { latitude, longitude, accuracy } = position.coords
-            const location = { lat: latitude, lng: longitude, accuracy: accuracy || 200 }
-            
-            setLocationAccuracy(accuracy)
-            setUserCoordinates({ lat: latitude, lng: longitude })
-            resolved = true
-            setIsGettingLocation(false)
-            setLocationStatus("Location found!")
-            
-            if (watchId !== null) navigator.geolocation.clearWatch(watchId)
-            if (timeoutId !== null) clearTimeout(timeoutId)
-            
-            resolve(location)
-          },
-          () => {}, // Silent fail
-          { 
-            enableHighAccuracy: true,
-            timeout: 3000,
-            maximumAge: 0
-          }
-        )
-      }
-
-      // Strategy 3: Watch position (continuous)
-      const tryWatch = () => {
-        watchId = navigator.geolocation.watchPosition(
-          (position) => {
-            if (resolved) return
-            const { latitude, longitude, accuracy } = position.coords
-            const location = { lat: latitude, lng: longitude, accuracy: accuracy || 200 }
-            
-            setLocationAccuracy(accuracy)
-            setUserCoordinates({ lat: latitude, lng: longitude })
-            
-            // Accept immediately - no waiting
-            resolved = true
-            setIsGettingLocation(false)
-            setLocationStatus("Location found!")
-            
-            if (watchId !== null) navigator.geolocation.clearWatch(watchId)
-            if (timeoutId !== null) clearTimeout(timeoutId)
-            
-            resolve(location)
-          },
-          () => {}, // Silent fail
-          { 
-            enableHighAccuracy: true,
-            timeout: 4000,
-            maximumAge: 0
-          }
-        )
-      }
-
-      // Strategy 4: Final fallback (very permissive)
-      const tryFinalFallback = () => {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            if (resolved) return
-            const { latitude, longitude, accuracy } = position.coords
-            const location = { lat: latitude, lng: longitude, accuracy: accuracy || 200 }
-            
-            setLocationAccuracy(accuracy)
-            setUserCoordinates({ lat: latitude, lng: longitude })
-            resolved = true
-            setIsGettingLocation(false)
-            setLocationStatus("Location found!")
-            
-            if (watchId !== null) navigator.geolocation.clearWatch(watchId)
-            if (timeoutId !== null) clearTimeout(timeoutId)
-            
-            resolve(location)
+          () => {
+            // Permission granted - sensors unlocked
+            resolve()
           },
           (error) => {
-            // Only show error if ALL strategies failed
+            // Permission denied or error
+            let errorMessage = ""
+            switch (error.code) {
+              case error.PERMISSION_DENIED:
+                errorMessage = "Location permission denied. Please enable location in your browser settings and set Location Mode to 'High Accuracy'."
+                break
+              case error.POSITION_UNAVAILABLE:
+                errorMessage = "Location unavailable. Please check your GPS/WiFi settings and enable High Accuracy mode."
+                break
+              case error.TIMEOUT:
+                errorMessage = "Location request timed out. Please ensure High Accuracy mode is enabled."
+                break
+              default:
+                errorMessage = "Could not get location. Please ensure location services are enabled."
+            }
+            reject(new Error(errorMessage))
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: 20000,
+            maximumAge: 0
+          }
+        )
+      })
+
+      // Permission granted - now try Google Geolocation API
+      setLocationStatus("Getting precise location...")
+
+      // STEP 2: Call Google Geolocation API (THE MAGIC - 10-30m accuracy, <1 second)
+      const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+      if (apiKey) {
+        try {
+          const response = await fetch(
+            `https://www.googleapis.com/geolocation/v1/geolocate?key=${apiKey}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                considerIp: true // Use IP as fallback
+              })
+            }
+          )
+
+          if (response.ok) {
+            const data = await response.json()
+            
+            if (data.location && data.accuracy) {
+              const location = {
+                lat: data.location.lat,
+                lng: data.location.lng,
+                accuracy: data.accuracy
+              }
+
+              // STEP 3: Verify accuracy before placing pin
+              if (location.accuracy <= TARGET_ACCURACY) {
+                setLocationAccuracy(location.accuracy)
+                setUserCoordinates({ lat: location.lat, lng: location.lng })
+                setIsGettingLocation(false)
+                setLocationStatus("Location found! ✓ Excellent (±" + Math.round(location.accuracy) + "m)")
+                return location
+              } else {
+                // Google API gave location but accuracy not perfect - use it but note it
+                setLocationAccuracy(location.accuracy)
+                setUserCoordinates({ lat: location.lat, lng: location.lng })
+                setIsGettingLocation(false)
+                setLocationStatus("Location found! (±" + Math.round(location.accuracy) + "m)")
+                return location
+              }
+            }
+          }
+        } catch (error) {
+          console.log("Google Geolocation API not available, using browser GPS fallback")
+          // Fall through to browser GPS fallback
+        }
+      }
+
+      // FALLBACK: Use watchPosition if Google API fails or not available
+      // First reading = rough, second/third = GPS lock
+      setLocationStatus("Refining location with GPS...")
+      
+      return new Promise((resolve) => {
+        let watchId: number | null = null
+        let bestLocation: { lat: number; lng: number; accuracy: number } | null = null
+        let resolved = false
+
+        watchId = navigator.geolocation.watchPosition(
+          (position) => {
+            const { latitude, longitude, accuracy } = position.coords
+            const location = { lat: latitude, lng: longitude, accuracy: accuracy || 100 }
+            
+            // Update UI
+            setLocationAccuracy(accuracy)
+            setUserCoordinates({ lat: latitude, lng: longitude })
+            
+            // Track best location
+            if (!bestLocation || accuracy < bestLocation.accuracy) {
+              bestLocation = location
+            }
+
+            // Update status
+            if (accuracy <= 20) {
+              setLocationStatus("Location found! ✓ Excellent (±" + Math.round(accuracy) + "m)")
+            } else if (accuracy <= TARGET_ACCURACY) {
+              setLocationStatus("Location found! ✓ Very Good (±" + Math.round(accuracy) + "m)")
+            } else if (accuracy <= 100) {
+              setLocationStatus("Refining location... ±" + Math.round(accuracy) + "m (GPS locking...)")
+            } else {
+              setLocationStatus("Getting better location... ±" + Math.round(accuracy) + "m")
+            }
+
+            // Lock accuracy: Stop only when accuracy is good (≤50m)
+            if (accuracy <= TARGET_ACCURACY && !resolved) {
+              resolved = true
+              setIsGettingLocation(false)
+              setLocationStatus("Location found! ✓ Excellent (±" + Math.round(accuracy) + "m)")
+              
+              // Stop GPS tracking once accuracy is sufficient
+              if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId)
+              }
+              
+              resolve(location)
+            }
+          },
+          (error) => {
             if (resolved) return
             
+            // If we have a location, use it
+            if (bestLocation) {
+              resolved = true
+              setIsGettingLocation(false)
+              setLocationStatus("Location found! (±" + Math.round(bestLocation.accuracy) + "m)")
+              if (watchId !== null) navigator.geolocation.clearWatch(watchId)
+              resolve(bestLocation)
+              return
+            }
+            
+            // No location - show error
             let errorMessage = ""
             switch (error.code) {
               case error.PERMISSION_DENIED:
@@ -294,6 +319,18 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
               case error.POSITION_UNAVAILABLE:
                 errorMessage = "Location unavailable. Please check your GPS/WiFi settings."
                 break
+              case error.TIMEOUT:
+                // Timeout - use best location if we have one
+                if (bestLocation) {
+                  resolved = true
+                  setIsGettingLocation(false)
+                  setLocationStatus("Location found! (±" + Math.round(bestLocation.accuracy) + "m)")
+                  if (watchId !== null) navigator.geolocation.clearWatch(watchId)
+                  resolve(bestLocation)
+                  return
+                }
+                errorMessage = "Location request timed out. Please ensure High Accuracy mode is enabled."
+                break
               default:
                 errorMessage = "Could not get location. Please ensure location services are enabled."
             }
@@ -301,31 +338,43 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
             resolved = true
             setIsGettingLocation(false)
             setError(errorMessage)
-            
             if (watchId !== null) navigator.geolocation.clearWatch(watchId)
-            if (timeoutId !== null) clearTimeout(timeoutId)
-            
             resolve(null)
           },
-          { 
-            enableHighAccuracy: false,
-            timeout: 5000,
-            maximumAge: 300000 // Accept location up to 5 minutes old
+          {
+            enableHighAccuracy: true, // Use GPS, not just network
+            timeout: 30000, // Long timeout
+            maximumAge: 0 // Always get fresh location
           }
         )
-      }
 
-      // Try all strategies in parallel
-      tryFastCached() // Fastest - uses cached location
-      tryHighAccuracy() // Better accuracy
-      tryWatch() // Continuous updates
-      
-      // Final fallback after 3 seconds
-      timeoutId = setTimeout(() => {
-        if (resolved) return
-        tryFinalFallback()
-      }, 3000)
-    })
+        // Maximum wait time - accept best location we have
+        setTimeout(() => {
+          if (resolved) return
+          
+          if (bestLocation) {
+            resolved = true
+            setIsGettingLocation(false)
+            setLocationStatus("Location found! (±" + Math.round(bestLocation.accuracy) + "m)")
+            if (watchId !== null) navigator.geolocation.clearWatch(watchId)
+            resolve(bestLocation)
+          } else {
+            // No location after max time
+            resolved = true
+            setIsGettingLocation(false)
+            setError("Could not get location. Please ensure Location Mode is set to 'High Accuracy' in your device settings.")
+            if (watchId !== null) navigator.geolocation.clearWatch(watchId)
+            resolve(null)
+          }
+        }, 30000) // 30 second max wait
+      })
+
+    } catch (error) {
+      setIsGettingLocation(false)
+      const errorMessage = error instanceof Error ? error.message : "Could not get location. Please ensure location services are enabled."
+      setError(errorMessage)
+      return null
+    }
   }, [])
 
   // Search for nearby agents

@@ -36,7 +36,7 @@ import {
 import { CurrencyFormatter } from "@/components/currency-formatter"
 import { dispatchBalanceUpdate } from "@/lib/balance-updater"
 import { getCurrentLocation } from "@/lib/location-utils"
-import { BoltMapboxMap } from "@/components/bolt-mapbox-map"
+import { GoogleMapsWrapper } from "@/components/google-maps-wrapper"
 import { AgentReviewModal } from "@/components/agent-review-modal"
 import { PositionSmoother } from "@/lib/smooth-marker"
 import { PremiumPlacesAutocomplete } from "@/components/premium-places-autocomplete"
@@ -1231,8 +1231,8 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
           </Card>
         ) : (
           <div className="space-y-4">
-            {/* Bolt-style Mapbox Map with agents - smooth vector-based rendering */}
-            <BoltMapboxMap
+            {/* Google Maps with Bolt-style styling - full detail like Bolt app */}
+            <GoogleMapsWrapper
               userLocation={userCoordinates}
               agents={nearbyAgents.map(agent => ({
                 id: agent.id,
@@ -1243,7 +1243,6 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
                 totalTransactions: agent.totalTransactions,
                 distance: agent.distance || 0,
                 distanceFormatted: agent.distanceFormatted || "0m",
-                isAvailable: true,
               }))}
               selectedAgent={selectedAgent ? {
                 id: selectedAgent.id,
@@ -1268,8 +1267,6 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
                 })
               }}
               showRoute={false}
-              height="600px"
-              className="rounded-2xl overflow-hidden"
             />
             
             {/* Real-time distance updates for agents */}
@@ -1809,8 +1806,8 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
                   )}
                 </CardHeader>
                 <CardContent className="p-0">
-                  {/* Bolt-style Mapbox Map for real-time agent tracking */}
-                  <BoltMapboxMap
+                  {/* Google Maps with Bolt-style for real-time agent tracking */}
+                  <GoogleMapsWrapper
                     userLocation={userCoordinates}
                     agents={request?.agent ? [{
                       id: request.agent.id,
@@ -1828,7 +1825,6 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
                             ? `${Math.round(agentDistance * 1000)}m` 
                             : `${agentDistance.toFixed(1)}km`)
                         : "Calculating...",
-                      isAvailable: true,
                     }] : []}
                     selectedAgent={request?.agent ? {
                       id: request.agent.id,
@@ -1856,10 +1852,6 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
                           ? request.agent.location
                           : null)
                     }
-                    etaSeconds={etaSeconds}
-                    etaFormatted={etaFormatted}
-                    requestStatus={step}
-                    height="600px"
                   />
                 </CardContent>
               </Card>

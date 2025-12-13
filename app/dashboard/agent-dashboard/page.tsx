@@ -35,8 +35,8 @@ import { CurrencyFormatter } from "@/components/currency-formatter"
 import { getCurrentLocation } from "@/lib/location-utils"
 import { dispatchBalanceUpdate } from "@/lib/balance-updater"
 
-// Dynamic import for Bolt-style Mapbox map to avoid SSR issues
-const BoltMapboxMap = dynamic(() => import("@/components/bolt-mapbox-map").then(mod => ({ default: mod.BoltMapboxMap })), {
+// Dynamic import for Google Maps with Bolt-style styling
+const GoogleMapsWrapper = dynamic(() => import("@/components/google-maps-wrapper").then(mod => ({ default: mod.GoogleMapsWrapper })), {
   ssr: false,
   loading: () => (
     <div className="h-96 bg-gray-100 rounded-lg flex items-center justify-center">
@@ -1303,9 +1303,9 @@ export default function AgentDashboardPage() {
                           </CardDescription>
                         </CardHeader>
                         <CardContent className="p-0">
-                          {/* Bolt-style Mapbox Map for agent navigation */}
+                          {/* Google Maps with Bolt-style for agent navigation */}
                           {agentLocation ? (
-                            <BoltMapboxMap
+                            <GoogleMapsWrapper
                               userLocation={request.coordinates} // Customer location
                               agents={[{
                                 id: user?.id || "agent",
@@ -1327,7 +1327,6 @@ export default function AgentDashboardPage() {
                                   return R * c
                                 })(),
                                 distanceFormatted: getDistanceToClient(request.coordinates) || "Calculating...",
-                                isAvailable: true,
                               }]}
                               selectedAgent={{
                                 id: user?.id || "agent",
@@ -1342,7 +1341,6 @@ export default function AgentDashboardPage() {
                               onSelectAgent={() => {}}
                               showRoute={true}
                               agentLocation={agentLocation}
-                              height="500px"
                             />
                           ) : (
                             <div className="h-96 flex items-center justify-center bg-gray-100 dark:bg-gray-800">

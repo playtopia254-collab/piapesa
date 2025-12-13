@@ -8,9 +8,9 @@ import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import dynamic from "next/dynamic"
 
-// Dynamic import to avoid SSR issues with Mapbox
-const BoltAgentTrackingMap = dynamic(
-  () => import("@/components/bolt-agent-tracking-map").then((mod) => ({ default: mod.BoltAgentTrackingMap })),
+// Dynamic import to avoid SSR issues with Google Maps
+const UberAgentTrackingMap = dynamic(
+  () => import("@/components/uber-agent-tracking-map").then((mod) => ({ default: mod.UberAgentTrackingMap })),
   {
     ssr: false,
     loading: () => (
@@ -97,8 +97,8 @@ export default function AgentTrackingPage() {
         </Card>
       )}
 
-      {/* Bolt-style Mapbox Tracking Map */}
-      <BoltAgentTrackingMap
+      {/* Google Maps with Bolt-style styling */}
+      <UberAgentTrackingMap
         onSelectAgent={handleSelectAgent}
         selectedAgentId={selectedAgent?.id || null}
         height="600px"
@@ -121,12 +121,12 @@ export default function AgentTrackingPage() {
               </ul>
             </div>
             <div className="space-y-2">
-              <h4 className="font-semibold">Premium Mapbox Features</h4>
+              <h4 className="font-semibold">Bolt-Style Map Features</h4>
               <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                <li>Vector tiles - sharp at all zoom levels</li>
-                <li>60fps smooth animations</li>
-                <li>Custom SVG markers with no pixelation</li>
-                <li>GPU-accelerated rendering</li>
+                <li>Visible buildings, roads, and landmarks</li>
+                <li>Smooth marker animations</li>
+                <li>Custom styled markers</li>
+                <li>Pink labels for malls and hotels like Bolt</li>
               </ul>
             </div>
           </div>

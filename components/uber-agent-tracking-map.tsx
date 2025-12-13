@@ -39,50 +39,61 @@ const defaultCenter = {
   lng: 36.8219,
 }
 
-// Bolt-style clean map theme - clear streets, easy to read
+// Bolt-style map theme - colorful with visible buildings like Bolt app
+// This keeps buildings, roads, and landmarks visible while reducing clutter
 const boltMapStyle: google.maps.MapTypeStyle[] = [
-  // Clean background colors
-  { elementType: "geometry", stylers: [{ color: "#f5f5f5" }] },
-  { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+  // Keep default colors for buildings (tan/beige) - DON'T change geometry color
   
-  // Clear, readable text
-  { elementType: "labels.text.fill", stylers: [{ color: "#616161" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#f5f5f5" }] },
+  // Roads - white with light grey borders (like Bolt)
+  { featureType: "road", elementType: "geometry.fill", stylers: [{ color: "#ffffff" }] },
+  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#e8e8e8" }] },
+  { featureType: "road.highway", elementType: "geometry.fill", stylers: [{ color: "#ffffff" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#d4d4d4" }] },
+  { featureType: "road.arterial", elementType: "geometry.fill", stylers: [{ color: "#ffffff" }] },
   
-  // Locality names (city, neighborhood) - prominent
-  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#1a1a1a" }, { weight: 0.5 }] },
-  
-  // Street names - clear and readable
-  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#4a4a4a" }] },
-  { featureType: "road.arterial", elementType: "labels.text.fill", stylers: [{ color: "#1a1a1a" }] },
+  // Road labels - dark and readable
+  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#333333" }] },
+  { featureType: "road", elementType: "labels.text.stroke", stylers: [{ color: "#ffffff" }, { weight: 3 }] },
   { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#1a1a1a" }] },
+  { featureType: "road.arterial", elementType: "labels.text.fill", stylers: [{ color: "#1a1a1a" }] },
   
-  // Roads - clean white with subtle borders
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#e0e0e0" }] },
-  { featureType: "road.arterial", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#ffffff" }] },
-  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#d0d0d0" }] },
+  // Area/locality names - prominent
+  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#1a1a1a" }] },
+  { featureType: "administrative.neighborhood", elementType: "labels.text.fill", stylers: [{ color: "#333333" }] },
   
-  // Parks - subtle green
-  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#c8e6c9" }] },
-  { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#4caf50" }] },
+  // Parks - visible green
+  { featureType: "poi.park", elementType: "geometry.fill", stylers: [{ color: "#c5e1a5" }] },
+  { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#2e7d32" }] },
   
-  // Water - subtle blue
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#bbdefb" }] },
-  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#1976d2" }] },
+  // Water - visible blue
+  { featureType: "water", elementType: "geometry.fill", stylers: [{ color: "#b3d9f5" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#1565c0" }] },
   
-  // Hide clutter but keep important landmarks
-  { featureType: "poi.business", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.attraction", elementType: "labels.icon", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.government", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.school", stylers: [{ visibility: "off" }] },
-  { featureType: "poi.sports_complex", stylers: [{ visibility: "off" }] },
-  { featureType: "transit.station.bus", stylers: [{ visibility: "off" }] },
+  // Buildings - keep visible with slight emphasis
+  { featureType: "building", elementType: "geometry.fill", stylers: [{ color: "#e8e4df" }] },
+  { featureType: "building", elementType: "geometry.stroke", stylers: [{ color: "#d5d0ca" }] },
   
-  // Keep important POIs like malls, hospitals
-  { featureType: "poi.medical", elementType: "labels", stylers: [{ visibility: "on" }] },
-  { featureType: "poi.place_of_worship", elementType: "labels", stylers: [{ visibility: "on" }] },
+  // Landscape - light tan/cream background
+  { featureType: "landscape", elementType: "geometry.fill", stylers: [{ color: "#f0ede8" }] },
+  
+  // Keep all POI labels visible (malls, hotels, hospitals, etc.)
+  { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#6b6b6b" }] },
+  { featureType: "poi", elementType: "labels.icon", stylers: [{ visibility: "on" }] },
+  
+  // Shopping/malls - pink labels like Bolt
+  { featureType: "poi.shopping_mall", elementType: "labels.text.fill", stylers: [{ color: "#d81b60" }] },
+  { featureType: "poi.shopping_mall", elementType: "labels.icon", stylers: [{ visibility: "on" }] },
+  
+  // Hotels/lodging - pink labels like Bolt
+  { featureType: "poi.lodging", elementType: "labels.text.fill", stylers: [{ color: "#d81b60" }] },
+  
+  // Transit - visible
+  { featureType: "transit", elementType: "labels.icon", stylers: [{ visibility: "on" }] },
+  { featureType: "transit.station", elementType: "labels.text.fill", stylers: [{ color: "#1565c0" }] },
+  
+  // Only hide small business POIs that clutter the map
+  { featureType: "poi.business", elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+  { featureType: "poi.business", elementType: "labels.text", stylers: [{ visibility: "off" }] },
 ]
 
 // Format distance for display

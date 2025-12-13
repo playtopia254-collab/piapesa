@@ -1,9 +1,17 @@
 "use client"
 
-import { useEffect, useState, useRef, useCallback } from "react"
+import { useEffect, useState, useRef, useCallback, useMemo } from "react"
 import { GoogleMap, useJsApiLoader, Marker, DirectionsRenderer, Circle } from "@react-google-maps/api"
 import { Card, CardContent } from "@/components/ui/card"
 import { Loader2 } from "lucide-react"
+import { 
+  PositionSmoother, 
+  getDistanceMeters, 
+  calculateBearing, 
+  lerp, 
+  lerpAngle,
+  easeOutCubic 
+} from "@/lib/smooth-marker"
 
 interface Agent {
   id: string
@@ -53,6 +61,21 @@ export function GoogleMapsWrapper({
   const [isMapReady, setIsMapReady] = useState(false)
   const [agentHeading, setAgentHeading] = useState<number>(0)
   const previousAgentLocation = useRef<{ lat: number; lng: number } | null>(null)
+  
+  // Smooth marker animation state
+  const [smoothedAgentPos, setSmoothedAgentPos] = useState<{ lat: number; lng: number } | null>(null)
+  const [displayHeading, setDisplayHeading] = useState<number>(0)
+  const positionSmootherRef = useRef<PositionSmoother | null>(null)
+  const animationFrameRef = useRef<number | null>(null)
+  const animationStartRef = useRef<number>(0)
+  const animationFromRef = useRef<{ lat: number; lng: number; heading: number }>({ lat: 0, lng: 0, heading: 0 })
+  const animationToRef = useRef<{ lat: number; lng: number; heading: number }>({ lat: 0, lng: 0, heading: 0 })
+  const isAnimatingRef = useRef<boolean>(false)
+  
+  // Initialize position smoother
+  if (!positionSmootherRef.current) {
+    positionSmootherRef.current = new PositionSmoother(0.4) // 0.4 = balanced smoothing
+  }
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || ""
 
@@ -175,30 +198,116 @@ export function GoogleMapsWrapper({
     return bounds
   }, [userLocation, agents, agentLocation, showMeetingPoint])
 
-  // Calculate agent heading (direction of movement)
+  // Smooth marker animation function
+  const animateMarker = useCallback(() => {
+    if (!isAnimatingRef.current) return
+    
+    const now = performance.now()
+    const elapsed = now - animationStartRef.current
+    const duration = 800 // 800ms animation duration
+    const progress = Math.min(elapsed / duration, 1)
+    const easedProgress = easeOutCubic(progress)
+    
+    // Interpolate position
+    const currentLat = lerp(animationFromRef.current.lat, animationToRef.current.lat, easedProgress)
+    const currentLng = lerp(animationFromRef.current.lng, animationToRef.current.lng, easedProgress)
+    
+    // Smooth heading interpolation
+    const currentHeading = lerpAngle(
+      animationFromRef.current.heading,
+      animationToRef.current.heading,
+      easedProgress
+    )
+    
+    setSmoothedAgentPos({ lat: currentLat, lng: currentLng })
+    setDisplayHeading(currentHeading)
+    
+    if (progress < 1) {
+      animationFrameRef.current = requestAnimationFrame(animateMarker)
+    } else {
+      isAnimatingRef.current = false
+      // Snap to final position
+      setSmoothedAgentPos({ lat: animationToRef.current.lat, lng: animationToRef.current.lng })
+      setDisplayHeading(animationToRef.current.heading)
+    }
+  }, [])
+
+  // Calculate agent heading and smooth position (Uber-like smooth movement)
   useEffect(() => {
-    if (agentLocation && previousAgentLocation.current) {
-      const prev = previousAgentLocation.current
-      const current = agentLocation
-      
-      // Calculate bearing (heading) between two points
-      const lat1 = (prev.lat * Math.PI) / 180
-      const lat2 = (current.lat * Math.PI) / 180
-      const deltaLng = ((current.lng - prev.lng) * Math.PI) / 180
-
-      const y = Math.sin(deltaLng) * Math.cos(lat2)
-      const x =
-        Math.cos(lat1) * Math.sin(lat2) -
-        Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLng)
-
-      const bearing = (Math.atan2(y, x) * 180) / Math.PI
-      setAgentHeading((bearing + 360) % 360)
+    if (!agentLocation) return
+    
+    // Apply GPS smoothing
+    const smoother = positionSmootherRef.current
+    if (!smoother) return
+    
+    const smoothed = smoother.update(agentLocation.lat, agentLocation.lng)
+    
+    // Calculate distance to determine if we should animate
+    const currentPos = smoothedAgentPos || previousAgentLocation.current
+    if (!currentPos) {
+      // First position - set immediately
+      setSmoothedAgentPos(smoothed)
+      previousAgentLocation.current = smoothed
+      return
     }
-
-    if (agentLocation) {
+    
+    const distance = getDistanceMeters(
+      currentPos.lat,
+      currentPos.lng,
+      smoothed.lat,
+      smoothed.lng
+    )
+    
+    // Skip tiny movements (< 2m) to avoid jitter
+    if (distance < 2) {
       previousAgentLocation.current = agentLocation
+      return
     }
-  }, [agentLocation])
+    
+    // Calculate new heading based on movement direction
+    let newHeading = displayHeading
+    if (distance > 3) {
+      newHeading = calculateBearing(
+        currentPos.lat,
+        currentPos.lng,
+        smoothed.lat,
+        smoothed.lng
+      )
+    }
+    
+    // Cancel any existing animation
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current)
+    }
+    
+    // Set up animation parameters
+    animationFromRef.current = {
+      lat: currentPos.lat,
+      lng: currentPos.lng,
+      heading: displayHeading
+    }
+    animationToRef.current = {
+      lat: smoothed.lat,
+      lng: smoothed.lng,
+      heading: newHeading
+    }
+    animationStartRef.current = performance.now()
+    isAnimatingRef.current = true
+    
+    // Start animation
+    animationFrameRef.current = requestAnimationFrame(animateMarker)
+    
+    // Update heading state for icon rotation
+    setAgentHeading(newHeading)
+    previousAgentLocation.current = agentLocation
+    
+    // Cleanup on unmount
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+      }
+    }
+  }, [agentLocation, animateMarker, displayHeading, smoothedAgentPos])
 
   // Smooth camera following for agent movement (like Bolt/Uber)
   useEffect(() => {
@@ -719,13 +828,23 @@ export function GoogleMapsWrapper({
           />
         )}
 
-        {/* Agent markers with accurate positioning */}
+        {/* Agent markers with smooth animation */}
         {isMapReady && agents.map((agent) => {
-          // Use real-time agent location if available and this is the selected agent
-          const agentPos =
-            agentLocation && selectedAgent?.id === agent.id
-              ? agentLocation
-              : agent.location
+          // Check if this is the selected agent being tracked in real-time
+          const isRealTimeTracking = agentLocation && selectedAgent?.id === agent.id
+          
+          // Use smoothed position for real-time tracking, otherwise use raw location
+          let agentPos: { lat: number; lng: number }
+          if (isRealTimeTracking && smoothedAgentPos) {
+            // Use smoothed position for ultra-smooth movement
+            agentPos = smoothedAgentPos
+          } else if (isRealTimeTracking && agentLocation) {
+            // Fallback to raw location if smooth position not ready
+            agentPos = agentLocation
+          } else {
+            // Static agent - use their stored location
+            agentPos = agent.location
+          }
 
           // Ensure coordinates are valid
           if (!agentPos || typeof agentPos.lat !== 'number' || typeof agentPos.lng !== 'number' || 
@@ -734,14 +853,14 @@ export function GoogleMapsWrapper({
             return null
           }
 
-          const icon = agentLocation && selectedAgent?.id === agent.id
-            ? createCarIcon(agentHeading)
+          // Use smooth heading for car icon rotation
+          const currentHeading = isRealTimeTracking ? displayHeading : 0
+          
+          const icon = isRealTimeTracking
+            ? createCarIcon(currentHeading)
             : createAgentMarkerIcon(selectedAgent?.id === agent.id)
 
           if (!icon) return null
-
-          // Use smooth animation for real-time tracking, drop animation for initial load
-          const isRealTimeTracking = agentLocation && selectedAgent?.id === agent.id
 
           return (
             <Marker
@@ -754,12 +873,12 @@ export function GoogleMapsWrapper({
               title={`${agent.name} - ${agent.distanceFormatted} away`}
               animation={
                 isRealTimeTracking
-                  ? undefined // No animation for real-time updates (smooth movement handled by position updates)
+                  ? undefined // No animation for real-time updates (smooth movement handled internally)
                   : google.maps.Animation.DROP // Drop animation only on initial load
               }
               onClick={() => onSelectAgent(agent)}
               zIndex={selectedAgent?.id === agent.id ? 1001 : 500}
-              optimized={false} // Disable optimization for smoother real-time updates
+              optimized={false} // CRITICAL: Disable optimization for smooth position updates
             />
           )
         })}

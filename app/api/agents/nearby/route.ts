@@ -68,10 +68,12 @@ export async function GET(request: NextRequest) {
       .toArray()
     console.log(`Available agents: ${availableAgents.length}`)
 
-    // Find ALL agents (both available and offline) with exact GPS coordinates
+    // Find ONLY ONLINE agents with exact GPS coordinates
+    // Offline agents should NEVER be shown to clients
     const agents = await usersCollection
       .find({
         isAgent: true,
+        isAvailable: true, // ONLY online agents - this is critical!
         $or: [
           { 
             lastKnownLocation: { $exists: true, $ne: null },
@@ -87,7 +89,7 @@ export async function GET(request: NextRequest) {
       })
       .toArray()
 
-    console.log(`Found ${agents.length} agents with GPS coordinates`)
+    console.log(`Found ${agents.length} ONLINE agents with GPS coordinates`)
     
     // Log details of each agent found
     agents.forEach((agent) => {
@@ -144,10 +146,7 @@ export async function GET(request: NextRequest) {
       })
       .filter((agent) => agent !== null)
       .sort((a, b) => {
-        // First sort by availability (available first), then by distance
-        if (a!.isAvailable !== b!.isAvailable) {
-          return a!.isAvailable ? -1 : 1
-        }
+        // Sort by distance only (all agents are online now)
         return a!.distance - b!.distance
       })
 

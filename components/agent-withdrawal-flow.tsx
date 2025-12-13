@@ -37,6 +37,7 @@ import { getCurrentLocation } from "@/lib/location-utils"
 import { UberAgentTrackingMap } from "@/components/uber-agent-tracking-map"
 import { GoogleMapsWrapper } from "@/components/google-maps-wrapper"
 import { AgentReviewModal } from "@/components/agent-review-modal"
+import { PositionSmoother } from "@/lib/smooth-marker"
 
 interface AgentWithdrawalFlowProps {
   user: {
@@ -119,6 +120,12 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
   const isSearchingLocation = useRef(false) // Prevent multiple location searches
   const locationPermissionDenied = useRef(false) // Track if permission was denied
   const mapInitialized = useRef(false) // Prevent map re-initialization
+  const agentPositionSmoother = useRef<PositionSmoother | null>(null) // Smooth agent location updates
+  
+  // Initialize agent position smoother for Uber-like smooth movement
+  if (!agentPositionSmoother.current) {
+    agentPositionSmoother.current = new PositionSmoother(0.35) // 0.35 = smooth but responsive
+  }
   const ACCURACY_THRESHOLD = 100 // Only search when accuracy ≤ 100m (for initial search)
   const MIN_WAIT_TIME = 6000 // Minimum 6 seconds wait time
 
@@ -530,12 +537,20 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
           setRouteDistance(data.routeDistance)
         }
         
-        // Update agent's real-time location
+        // Update agent's real-time location with smoothing for Uber-like movement
         if (data.agent?.location && typeof data.agent.location === 'object' && 
             typeof data.agent.location.lat === 'number' && typeof data.agent.location.lng === 'number') {
+          // Apply GPS smoothing to reduce jitter and jumps
+          const smoother = agentPositionSmoother.current
+          let smoothedLocation = { lat: data.agent.location.lat, lng: data.agent.location.lng }
+          
+          if (smoother) {
+            smoothedLocation = smoother.update(data.agent.location.lat, data.agent.location.lng)
+          }
+          
           setAgentRealTimeLocation({
-            lat: data.agent.location.lat,
-            lng: data.agent.location.lng,
+            lat: smoothedLocation.lat,
+            lng: smoothedLocation.lng,
           })
           
           // Also update the request object with the latest agent location

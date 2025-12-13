@@ -79,13 +79,11 @@ export async function POST(request: NextRequest) {
           lng: lngNum,
           updatedAt: new Date(),
         }
-        // Also update location field
-        if (!agent.location) {
-          updateData.location = {
-            lat: latNum,
-            lng: lngNum,
-            updatedAt: new Date(),
-          }
+        // Always update location field (not just if missing) for real-time tracking
+        updateData.location = {
+          lat: latNum,
+          lng: lngNum,
+          updatedAt: new Date(),
         }
         console.log(`📍 Agent ${agentId} going online at: ${latNum}, ${lngNum}`)
       }

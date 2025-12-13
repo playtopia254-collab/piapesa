@@ -173,6 +173,7 @@ export default function AgentDashboardPage() {
   }, [user?.id, isAvailable, fetchRequests, fetchStats])
 
   // Continuously update location when online or have active requests
+  // Update every 3-5 seconds for real-time tracking (Uber-like)
   useEffect(() => {
     if (!user?.id) return
     if (!isAvailable && myRequests.length === 0) return
@@ -180,21 +181,23 @@ export default function AgentDashboardPage() {
     // Update location immediately
     updateAgentLocation()
 
-    // Update every 30 seconds while active
+    // Update every 3 seconds while active (for real-time discovery)
     const locationInterval = setInterval(() => {
       updateAgentLocation()
-    }, 30000)
+    }, 3000) // Changed from 30s to 3s for real-time updates
 
     return () => clearInterval(locationInterval)
   }, [user?.id, isAvailable, myRequests.length])
 
-  // Update agent location
+  // Update agent location with better accuracy
   const updateAgentLocation = async () => {
     if (!user?.id) return
 
     try {
       const coords = await getCurrentLocation()
       setAgentLocation(coords) // Store in state for map display
+      
+      console.log(`📍 Agent ${user.id} updating location: ${coords.lat}, ${coords.lng} (accuracy: ±${coords.accuracy ? Math.round(coords.accuracy) : 'unknown'}m)`)
       
       const response = await fetch("/api/agents/update-location", {
         method: "POST",
@@ -208,10 +211,12 @@ export default function AgentDashboardPage() {
 
       const data = await response.json()
       if (data.success) {
-        console.log("Agent location updated:", data.location)
+        console.log(`✅ Agent location updated successfully: ${data.location.lat}, ${data.location.lng}`)
+      } else {
+        console.error("❌ Failed to update agent location:", data.error)
       }
     } catch (error) {
-      console.error("Failed to update location:", error)
+      console.error("❌ Failed to update location:", error)
       // Don't show error to user, location is optional
     }
   }
@@ -290,6 +295,28 @@ export default function AgentDashboardPage() {
         // Update session storage
         const updatedUser = { ...user, isAvailable: data.isAvailable }
         sessionStorage.setItem("currentUser", JSON.stringify(updatedUser))
+        
+        // If going online, verify location was set
+        if (data.isAvailable && locationData.lat && locationData.lng) {
+          console.log(`✅ Agent ${user.id} is now ONLINE at: ${locationData.lat}, ${locationData.lng}`)
+          // Verify location was saved by checking status
+          setTimeout(async () => {
+            try {
+              const statusResponse = await fetch(`/api/agents/check-status?agentId=${user.id}`)
+              const statusData = await statusResponse.json()
+              if (statusData.success) {
+                console.log("📊 Agent Status:", {
+                  isAvailable: statusData.agent.isAvailable,
+                  hasLocation: statusData.agent.hasLocation,
+                  location: statusData.agent.location,
+                  locationAge: statusData.agent.locationAge ? `${statusData.agent.locationAge}s ago` : "N/A"
+                })
+              }
+            } catch (e) {
+              console.error("Failed to check agent status:", e)
+            }
+          }, 1000)
+        }
       }
     } catch (error) {
       console.error("Failed to toggle availability:", error)

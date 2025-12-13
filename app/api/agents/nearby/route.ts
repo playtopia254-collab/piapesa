@@ -11,7 +11,11 @@ export async function GET(request: NextRequest) {
     const userLat = searchParams.get("lat")
     const userLng = searchParams.get("lng")
     // Allow up to 100km search radius, default 50km
-    const maxDistance = Math.min(Number.parseFloat(searchParams.get("maxDistance") || "50"), 100) // Default 50km, max 100km
+    // Support both km and meters (0.1 = 100m, 50 = 50km)
+    const maxDistanceParam = searchParams.get("maxDistance") || "50"
+    const maxDistance = Number.parseFloat(maxDistanceParam)
+    // If less than 1, treat as km (0.1 = 0.1km = 100m), otherwise treat as km
+    const maxDistanceKm = maxDistance < 1 ? maxDistance : Math.min(maxDistance, 100)
 
     if (!userLat || !userLng) {
       return NextResponse.json(
@@ -51,7 +55,7 @@ export async function GET(request: NextRequest) {
     console.log("🔍 FINDING NEARBY AGENTS")
     console.log("=".repeat(80))
     console.log("User location:", { lat: userLatNum, lng: userLngNum })
-    console.log("Max distance:", maxDistance, "km")
+    console.log("Max distance:", maxDistanceKm, "km")
 
     // First, check how many agents exist at all
     const allAgents = await usersCollection
@@ -116,11 +120,11 @@ export async function GET(request: NextRequest) {
           agentLocation.lng
         )
 
-        console.log(`   Distance: ${distance.toFixed(2)}km (max: ${maxDistance}km)`)
+        console.log(`   Distance: ${distance.toFixed(2)}km (max: ${maxDistanceKm}km)`)
         
         // Log if agent is outside radius but close
-        if (distance > maxDistance) {
-          console.log(`   ⚠️ Agent ${agent._id} (${agent.name}) is ${distance.toFixed(2)}km away (outside ${maxDistance}km radius)`)
+        if (distance > maxDistanceKm) {
+          console.log(`   ⚠️ Agent ${agent._id} (${agent.name}) is ${distance.toFixed(2)}km away (outside ${maxDistanceKm}km radius)`)
           return null
         }
 
@@ -174,7 +178,27 @@ export async function GET(request: NextRequest) {
 
     const finalAgents = agentsWithReviews.filter((agent) => agent !== null)
 
-    console.log(`✅ Returning ${finalAgents.length} agents within ${maxDistance}km`)
+    console.log(`✅ Returning ${finalAgents.length} agents within ${maxDistanceKm}km`)
+    
+    // Log detailed info for debugging
+    if (finalAgents.length === 0 && agents.length > 0) {
+      console.log("\n⚠️ DEBUG: Agents found but outside search radius:")
+      agents.forEach((agent) => {
+        const agentLocation = agent.lastKnownLocation || agent.location
+        if (agentLocation?.lat && agentLocation?.lng) {
+          const dist = calculateDistance(
+            userLatNum,
+            userLngNum,
+            agentLocation.lat,
+            agentLocation.lng
+          )
+          console.log(`  - ${agent.name}: ${dist.toFixed(2)}km away (Available: ${agent.isAvailable || false}, Has GPS: true)`)
+        } else {
+          console.log(`  - ${agent.name}: No GPS location (Available: ${agent.isAvailable || false})`)
+        }
+      })
+    }
+    
     console.log("=".repeat(80))
 
     // If no agents found, provide helpful debug info
@@ -183,7 +207,7 @@ export async function GET(request: NextRequest) {
       console.log(`  - Total agents in DB: ${allAgents.length}`)
       console.log(`  - Available agents: ${availableAgents.length}`)
       console.log(`  - Agents with GPS: ${agents.length}`)
-      console.log(`  - Search radius: ${maxDistance}km`)
+      console.log(`  - Search radius: ${maxDistanceKm}km`)
       console.log(`  - User location: ${userLatNum}, ${userLngNum}`)
       
       // Calculate and log distances for all agents (even if outside radius)
@@ -214,7 +238,7 @@ export async function GET(request: NextRequest) {
         totalAgents: allAgents.length,
         availableAgents: availableAgents.length,
         agentsWithGPS: agents.length,
-        searchRadius: maxDistance,
+        searchRadius: maxDistanceKm,
         // Include distances to all agents for debugging
         agentDistances: agents.map((agent) => {
           const agentLocation = agent.lastKnownLocation || agent.location

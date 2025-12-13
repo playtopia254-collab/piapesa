@@ -26,7 +26,7 @@ export default function SendMoneyPage() {
   const [formData, setFormData] = useState({
     toPhone: "",
     amount: "",
-    network: "M-Pesa",
+    network: "Pia Pesa",
     purpose: "",
   })
   const [transaction, setTransaction] = useState<Transaction | null>(null)

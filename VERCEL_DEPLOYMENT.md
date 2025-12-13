@@ -1,4 +1,26 @@
-# 🚀 Vercel Deployment Checklist
+# 🚀 Vercel Deployment Checklist (Premium Edition)
+
+## 🎯 Google APIs to Enable (Premium Features)
+
+Enable these APIs in [Google Cloud Console](https://console.cloud.google.com/apis/library):
+
+### Core APIs (Required)
+1. ✅ **Maps JavaScript API** - Interactive maps
+2. ✅ **Geocoding API** - Address ↔ coordinates
+3. ✅ **Directions API** - Route calculation
+4. ✅ **Distance Matrix API** - Multi-destination ETA
+5. ✅ **Geolocation API** - Enhanced location accuracy
+
+### Premium APIs (Recommended)
+6. ✅ **Places API (New)** - Address autocomplete
+7. ✅ **Roads API** - Snap-to-roads for smooth tracking
+8. ✅ **Street View Static API** - Location verification
+
+### AI/ML APIs (Optional - Future)
+9. ⬜ **Cloud Vision API** - ID verification
+10. ⬜ **Cloud Text-to-Speech API** - Voice navigation
+
+---
 
 ## ✅ Environment Variables (CRITICAL)
 

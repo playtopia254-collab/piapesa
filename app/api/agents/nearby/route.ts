@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     const requestId = searchParams.get("requestId")
     const userLat = searchParams.get("lat")
     const userLng = searchParams.get("lng")
-    const maxDistance = Number.parseFloat(searchParams.get("maxDistance") || "20") // Default 20km
+    const maxDistance = Number.parseFloat(searchParams.get("maxDistance") || "50") // Default 50km (increased for better coverage)
 
     if (!userLat || !userLng) {
       return NextResponse.json(
@@ -172,6 +172,16 @@ export async function GET(request: NextRequest) {
     console.log(`✅ Returning ${finalAgents.length} agents within ${maxDistance}km`)
     console.log("=".repeat(80))
 
+    // If no agents found, provide helpful debug info
+    if (finalAgents.length === 0) {
+      console.log("⚠️ No agents found. Debug info:")
+      console.log(`  - Total agents in DB: ${allAgents.length}`)
+      console.log(`  - Available agents: ${availableAgents.length}`)
+      console.log(`  - Agents with GPS: ${agents.length}`)
+      console.log(`  - Search radius: ${maxDistance}km`)
+      console.log(`  - User location: ${userLatNum}, ${userLngNum}`)
+    }
+
     return NextResponse.json({
       success: true,
       agents: finalAgents,
@@ -180,6 +190,12 @@ export async function GET(request: NextRequest) {
         lng: userLngNum,
       },
       totalFound: finalAgents.length,
+      debug: finalAgents.length === 0 ? {
+        totalAgents: allAgents.length,
+        availableAgents: availableAgents.length,
+        agentsWithGPS: agents.length,
+        searchRadius: maxDistance,
+      } : undefined,
     })
   } catch (error) {
     console.error("Find nearby agents error:", error)

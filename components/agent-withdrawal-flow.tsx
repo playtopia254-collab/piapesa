@@ -132,7 +132,7 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
 
     try {
       const response = await fetch(
-        `/api/agents/nearby?lat=${coords.lat}&lng=${coords.lng}&maxDistance=20`
+        `/api/agents/nearby?lat=${coords.lat}&lng=${coords.lng}&maxDistance=50`
       )
       const data = await response.json()
 
@@ -143,16 +143,26 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
       })
 
       if (data.success && data.agents) {
-        setNearbyAgents(data.agents.map((agent: any) => ({
-          id: agent.id,
-          name: agent.name,
-          phone: agent.phone,
-          location: agent.location || agent.lastKnownLocation, // Use exact GPS coordinates
-          rating: agent.rating || 5.0,
-          totalTransactions: agent.totalTransactions || 0,
-          distance: agent.distance || 0,
-          distanceFormatted: agent.distanceFormatted || "0m",
-        })))
+        if (data.agents.length === 0) {
+          // Provide helpful error message with debug info
+          const debugInfo = data.debug
+          let errorMsg = "No agents found nearby"
+          if (debugInfo) {
+            errorMsg += `. Total agents: ${debugInfo.totalAgents}, Available: ${debugInfo.availableAgents}, With GPS: ${debugInfo.agentsWithGPS}, Search radius: ${debugInfo.searchRadius}km`
+          }
+          setError(errorMsg)
+        } else {
+          setNearbyAgents(data.agents.map((agent: any) => ({
+            id: agent.id,
+            name: agent.name,
+            phone: agent.phone,
+            location: agent.location || agent.lastKnownLocation, // Use exact GPS coordinates
+            rating: agent.rating || 5.0,
+            totalTransactions: agent.totalTransactions || 0,
+            distance: agent.distance || 0,
+            distanceFormatted: agent.distanceFormatted || "0m",
+          })))
+        }
       } else {
         setError(data.error || "No agents found nearby")
       }

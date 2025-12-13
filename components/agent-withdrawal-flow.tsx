@@ -127,12 +127,7 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
   const isSearchingLocation = useRef(false) // Prevent multiple location searches
   const locationPermissionDenied = useRef(false) // Track if permission was denied
   const mapInitialized = useRef(false) // Prevent map re-initialization
-  const agentPositionSmoother = useRef<PositionSmoother | null>(null) // Smooth agent location updates
-  
-  // Initialize agent position smoother for Uber-like smooth movement
-  if (!agentPositionSmoother.current) {
-    agentPositionSmoother.current = new PositionSmoother(0.35) // 0.35 = smooth but responsive
-  }
+  const agentPositionSmoother = useRef<PositionSmoother>(new PositionSmoother(0.35)) // Smooth agent location updates
   
   // Snap location to nearest road for smoother tracking (premium feature)
   const snapToRoad = useCallback(async (location: { lat: number; lng: number }): Promise<{ lat: number; lng: number }> => {
@@ -1034,10 +1029,10 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
               </Label>
               <PremiumPlacesAutocomplete
                 placeholder="Search for a landmark or address..."
-                currentLocation={userLocation}
+                currentLocation={userCoordinates}
                 onPlaceSelect={(place) => {
                   if (place.location) {
-                    setUserLocation(place.location)
+                    setUserCoordinates(place.location)
                     setLocation(place.description)
                   } else {
                     setLocation(place.description)
@@ -1051,11 +1046,11 @@ export function AgentWithdrawalFlow({ user, onComplete, onCancel }: AgentWithdra
             </div>
 
             {/* Street View Preview */}
-            {userLocation && (
+            {userCoordinates && (
               <div className="space-y-2">
                 <Label className="text-sm">Location Preview</Label>
                 <PremiumStreetView
-                  location={userLocation}
+                  location={userCoordinates}
                   showControls={false}
                   showLocationBadge={true}
                   className="h-40"

@@ -1,0 +1,302 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Updated color tokens to match Pia Pesa fintech design brief */
+  --background: oklch(1 0 0); /* white */
+  --foreground: oklch(0.3 0 0); /* dark gray #374151 */
+  --card: oklch(0.99 0.02 85); /* light cream #fefce8 */
+  --card-foreground: oklch(0.3 0 0); /* dark gray */
+  --popover: oklch(1 0 0); /* white */
+  --popover-foreground: oklch(0.3 0 0); /* dark gray */
+  --primary: oklch(0.65 0.15 45); /* amber #d97706 */
+  --primary-foreground: oklch(1 0 0); /* white */
+  --secondary: oklch(0.65 0.25 330); /* bright pink #ec4899 */
+  --secondary-foreground: oklch(1 0 0); /* white */
+  --muted: oklch(0.99 0.02 85); /* light cream */
+  --muted-foreground: oklch(0.3 0 0); /* dark gray */
+  --accent: oklch(0.65 0.25 330); /* bright pink */
+  --accent-foreground: oklch(1 0 0); /* white */
+  --destructive: oklch(0.55 0.25 15); /* red for errors */
+  --destructive-foreground: oklch(1 0 0); /* white */
+  --border: oklch(0.85 0 0); /* light border */
+  --input: oklch(0.99 0.02 85); /* light cream for inputs */
+  --ring: oklch(0.65 0.15 45); /* amber for focus rings */
+  --chart-1: oklch(0.75 0.15 65); /* chart colors */
+  --chart-2: oklch(0.65 0.15 120);
+  --chart-3: oklch(0.55 0.15 180);
+  --chart-4: oklch(0.45 0.15 240);
+  --chart-5: oklch(0.35 0.15 300);
+  --radius: 0.5rem;
+  --sidebar: oklch(0.99 0.02 85); /* light cream */
+  --sidebar-foreground: oklch(0.3 0 0); /* dark gray */
+  --sidebar-primary: oklch(0.65 0.15 45); /* amber */
+  --sidebar-primary-foreground: oklch(1 0 0); /* white */
+  --sidebar-accent: oklch(0.65 0.25 330); /* bright pink */
+  --sidebar-accent-foreground: oklch(1 0 0); /* white */
+  --sidebar-border: oklch(0.85 0 0); /* light border */
+  --sidebar-ring: oklch(0.65 0.15 45); /* amber */
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.145 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.145 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.65 0.15 45); /* keep amber in dark mode */
+  --primary-foreground: oklch(0.145 0 0);
+  --secondary: oklch(0.65 0.25 330); /* keep pink in dark mode */
+  --secondary-foreground: oklch(0.145 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.65 0.25 330);
+  --accent-foreground: oklch(0.145 0 0);
+  --destructive: oklch(0.55 0.25 15);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.269 0 0);
+  --input: oklch(0.269 0 0);
+  --ring: oklch(0.65 0.15 45);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.65 0.15 45);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.65 0.25 330);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(0.269 0 0);
+  --sidebar-ring: oklch(0.65 0.15 45);
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@keyframes moveConnection {
+  0% {
+    transform: translateX(0);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translateX(200px);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(400px);
+    opacity: 0.4;
+  }
+}
+
+@keyframes moveConnectionReverse {
+  0% {
+    transform: translateX(0);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translateX(-200px);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(-400px);
+    opacity: 0.4;
+  }
+}
+
+.animate-move-connection {
+  animation: moveConnection 2.5s ease-in-out infinite;
+}
+
+.animate-move-connection-reverse {
+  animation: moveConnectionReverse 2.5s ease-in-out infinite;
+}
+
+/* ============================================================================
+   MAPBOX GL - BOLT STYLE ENHANCEMENTS
+   ============================================================================
+   
+   These styles ensure the Mapbox map has that premium, Bolt-like feel:
+   - Smooth transitions
+   - Clean, minimal UI
+   - GPU-accelerated animations
+   ============================================================================ */
+
+/* Ensure Mapbox canvas uses GPU acceleration */
+.mapboxgl-canvas {
+  will-change: transform;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* Smooth marker animations */
+.bolt-user-marker,
+.bolt-agent-marker,
+.bolt-car-marker {
+  will-change: transform;
+  transition: transform 0.1s ease-out;
+}
+
+/* Premium shadow for markers on hover */
+.bolt-agent-marker:hover {
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.2));
+  transform: translate(-50%, -100%) scale(1.05);
+}
+
+/* Clean attribution styling */
+.mapboxgl-ctrl-attrib {
+  font-size: 10px !important;
+  background: rgba(255, 255, 255, 0.8) !important;
+  backdrop-filter: blur(4px);
+  border-radius: 4px !important;
+  padding: 2px 6px !important;
+}
+
+.mapboxgl-ctrl-attrib a {
+  color: #6b7280 !important;
+}
+
+/* Navigation controls styling */
+.mapboxgl-ctrl-group {
+  background: rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: blur(8px);
+  border-radius: 12px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+  border: 1px solid rgba(0, 0, 0, 0.05) !important;
+  overflow: hidden;
+}
+
+.mapboxgl-ctrl-group button {
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: 0 !important;
+}
+
+.mapboxgl-ctrl-group button:hover {
+  background-color: #f3f4f6 !important;
+}
+
+.mapboxgl-ctrl-group button:focus {
+  outline: none !important;
+  box-shadow: inset 0 0 0 2px rgba(99, 102, 241, 0.5) !important;
+}
+
+/* Geolocate button pulse animation */
+.mapboxgl-ctrl-geolocate-active {
+  background-color: rgba(59, 130, 246, 0.1) !important;
+}
+
+/* Remove default blue focus outline that can look jarring */
+.mapboxgl-canvas:focus {
+  outline: none;
+}
+
+/* Smooth popup transitions */
+.mapboxgl-popup {
+  animation: popupFadeIn 0.2s ease-out;
+}
+
+@keyframes popupFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Premium popup styling */
+.mapboxgl-popup-content {
+  padding: 16px !important;
+  border-radius: 12px !important;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15) !important;
+  border: 1px solid rgba(0, 0, 0, 0.05) !important;
+}
+
+.mapboxgl-popup-tip {
+  border-top-color: white !important;
+}
+
+/* Dark mode support for Mapbox controls */
+.dark .mapboxgl-ctrl-group {
+  background: rgba(30, 30, 30, 0.9) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark .mapboxgl-ctrl-group button {
+  color: #e5e7eb !important;
+}
+
+.dark .mapboxgl-ctrl-group button:hover {
+  background-color: #374151 !important;
+}
+
+.dark .mapboxgl-ctrl-attrib {
+  background: rgba(30, 30, 30, 0.8) !important;
+}
+
+.dark .mapboxgl-ctrl-attrib a {
+  color: #9ca3af !important;
+}
+
+.dark .mapboxgl-popup-content {
+  background: #1f2937 !important;
+  color: #f9fafb !important;
+}
+
+.dark .mapboxgl-popup-tip {
+  border-top-color: #1f2937 !important;
+}
